@@ -116,7 +116,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-process:2.8.7")
 
     // Navigation
-    implementation("androidx.navigation:navigation-compose:2.8.3")
+    // issue#45: 自研 Overlay 栈 → Navigation Compose。2.8.3 是 2024-10 的版本,
+    // 与 BOM 2026.09.00 的 Compose 1.13 alpha 栈不同代;预测性返回的手势进度驱动
+    // pop 依赖较新的 navigation-runtime + activity 1.13 回调链,故升到当前稳定线。
+    implementation("androidx.navigation:navigation-compose:2.10.1")
 
     // DataStore (preferences)
     implementation("androidx.datastore:datastore-preferences:1.1.1")

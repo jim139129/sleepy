@@ -22,11 +22,17 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.SaveableStateHolder
-import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
+import com.lingion.sleepy.ui.nav.NavSession
+import com.lingion.sleepy.ui.nav.SleepyNavHost
+import com.lingion.sleepy.ui.nav.SleepyNavigator
+import kotlinx.coroutines.CoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -192,15 +198,11 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Tab(val labelRes: Int, val icon: ImageVector) {
+internal enum class Tab(val labelRes: Int, val icon: ImageVector) {
     Schedule(R.string.tab_schedule, Icons.Outlined.CalendarMonth),
     Today(R.string.tab_today, Icons.Outlined.Today),
     Manage(R.string.tab_manage, Icons.Outlined.Settings),
     Mine(R.string.tab_mine, Icons.Outlined.Person)
-}
-
-private enum class OverlayScreen {
-    AddCourse, AllTables, EditTable, Theme, General, Holiday, Export, Reminder, About, License, WidgetManagement, WidgetEdit, PeriodTables, PeriodTableEdit
 }
 
 @Composable
@@ -212,45 +214,13 @@ private fun AppRoot(
     pendingImportText: String? = null,
     consumePendingImportText: () -> Unit = {}
 ) {
-    var currentTab by remember { mutableStateOf(Tab.Schedule) }
-    var editingCourse by remember { mutableStateOf<CourseEntity?>(null) }
-    // v7.10.8 返回键分层修复: overlayScreen 从单变量改成导航栈 —
-    // 旧实现一个 BackHandler 把整摞 overlay 一次清空(通用设置→假期设置 按一次返回
-    // 直接退两级); 栈化后每层只弹自己(通用→假期 返回 只回通用)。
-    // 栈顶 = 当前显示页。pushOverlay 进页, popOverlay 退页。
-    // 语言切换触发 Activity.recreate() 后仍需保留栈(旧注释决策 D2 同理),
-    // editingCourse(CourseEntity)无法 Bundle 化: 编辑课程会话中不保存栈,
-    //   旋转/进程恢复后退回主 Tab(丢弃编辑但安全), 避免恢复成"新增课程"空表单造成重复加课。
-    val overlayScreenState = rememberSaveable(
-        stateSaver = Saver<List<OverlayScreen>, List<OverlayScreen>>(
-            save = { stack -> if (editingCourse == null) stack else emptyList() },
-            restore = { it }
-        )
-    ) { mutableStateOf<List<OverlayScreen>>(emptyList()) }
-    var overlayStack by overlayScreenState
-    fun topOverlay(): OverlayScreen? = overlayStack.lastOrNull()
-    fun pushOverlay(s: OverlayScreen) { overlayStack = overlayStack + s }
-    fun popOverlay() { overlayStack = overlayStack.dropLast(1) }
-    fun popToRoot() { overlayStack = emptyList() }
-    fun hasOverlay(): Boolean = overlayStack.isNotEmpty()
-    // overlayScreen 的伴生导航参数必须同步持久化, 否则旋转恢复后 overlay 存活但参数归 null:
-    //   EditTable 的 tableId=null 语义为"编辑当前课表", 会静默改错表; pendingNewTableId 丢失
-    //   会让新建空表遗留在 DB 且误显示删除按钮。三者均可 Bundle 化(Long?), 一并 rememberSaveable。
-    var editTableId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var pendingNewTableId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var previousDefaultTableId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var widgetEditId by rememberSaveable { mutableStateOf<Int?>(null) }
-    // issue#40: 时间节次表编辑页参数 — Long 可 Bundle 化, 旋转恢复同 editTableId 处理
-    var editPeriodTableId by rememberSaveable { mutableStateOf<Long?>(null) }
-    // issue#40: 本表是否为"新建后直接进入"的未保存表 — 编辑页返回时丢弃残留行
-    var pendingNewPeriodTableId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var autoImportTriggered by remember { mutableStateOf(false) }
-    // 底栏形态(贴底/悬浮 Dock): AppRoot 持真值 — 设置页改, 底栏即时切
+    // issue#45: 自研 Overlay 栈 → Navigation Compose。
+    // AppRoot 只持「不属于任何路由的会话态」: 当前 tab / 底栏形态 / 课表视图模式。
+    // 导航栈、页面状态保存、返回手势全部交给 NavHost(见 SleepyNavHost.kt)。
+    var currentTab by rememberSaveable { mutableStateOf(Tab.Schedule) }
     val context = LocalContext.current
-    // 课表视图模式(周视图/网格) — 会话级状态, 与 currentTab 同级持有:
-    // overlay(加课/编辑课程)与 tab 切换都会整页移除 ScheduleScreen, 状态必须提升到这层才存活。
-    // 初始化只读启动默认(KEY_START_VIEW), 手动切换仅写这里不回写 AppPrefs —
-    // 启动默认与会话内切换分离(AppPrefs.kt KEY_START_VIEW 注释的既有设计)。
+    // 课表视图模式(周视图/网格) — 会话级,与 currentTab 同级持有:
+    // overlay 与 tab 切换都会整页移除 ScheduleScreen,状态必须提升到这层才存活。
     var scheduleViewMode by remember {
         mutableStateOf(
             if (AppPrefs.getStartView(context) == "cards") ViewMode.Cards else ViewMode.Full
@@ -259,301 +229,61 @@ private fun AppRoot(
     var navDock by remember { mutableStateOf(AppPrefs.isNavDock(context)) }
     val mainScope = rememberCoroutineScope()
     val mainVm: ScheduleViewModel = viewModel()
-    // 返回恢复精确页面状态: 条件组合(if (topOverlay()==X) {...; return})使被覆盖页整体
-    // 离开组合树, remember/rememberSaveable 状态销毁 — 通用设置二级页往返滚动归零/折叠卡
-    // 全收起、tab 往返丢滚动位置都是这个根因。每个 overlay/tab 分支内容包进独立 key 的
-    // SaveableStateProvider, 页面被覆盖时状态存进 holder(rememberSaveable 作用域), 返回时
-    // 原样恢复(滚动位置/折叠展开/输入)。key 用稳定字符串, 禁用组合位置 key(会互相踩)。
-    val saveableStateHolder: SaveableStateHolder = rememberSaveableStateHolder()
+    val nav: NavHostController = rememberNavController()
+    val session = remember { NavSession() }
+    val navigator = remember(nav, session) { SleepyNavigator(nav, session) }
 
-    androidx.compose.runtime.LaunchedEffect(deepLinkCourse?.id) {
-        if (deepLinkCourse != null) { editingCourse = deepLinkCourse; onDeepLinkConsumed() }
-    }
-    androidx.compose.runtime.LaunchedEffect(pendingImportText) {
-        if (!autoImportTriggered && pendingImportText != null) { autoImportTriggered = true; currentTab = Tab.Manage }
-    }
-
-    // 返回键: 只处理"有 overlay 在栈上"或"编辑课程"两种拦截; 主页面留给双击退出
-    // (下方 exitBackHandler — enabled 互斥, 栈空时才接管)。
-    BackHandler(enabled = hasOverlay() || editingCourse != null) {
-        if (pendingNewPeriodTableId != null && topOverlay() == OverlayScreen.PeriodTableEdit) {
-            // issue#40: 新建时间节次表未保存按系统返回 = 放弃, 清残留行
-            val discardId = pendingNewPeriodTableId!!
-            pendingNewPeriodTableId = null; editPeriodTableId = null
-            mainVm.discardNewPeriodTable(discardId)
-            popOverlay()
-        } else if (pendingNewTableId != null) {
-            val discardId = pendingNewTableId!!; val fallback = previousDefaultTableId
-            pendingNewTableId = null; previousDefaultTableId = null
-            mainVm.discardNewTable(discardId, fallback)
-            popToRoot(); editTableId = null
-        } else { editingCourse = null; editTableId = null; popOverlay() }
-    }
-
-    // v7.10.8 主页面双击返回退出 — 第一次按 Toast 提示, 2 秒内再按才真退。
-    // enabled 条件与上面互斥: 栈空且无编辑会话时才接管。
-    // v7.10.9: 课表页 = 首页 — 其他 Tab(今日/管理/我的)按返回先回课表页,
-    // 只有课表页本身才触发双击退出(用户 2026-09-02)。
-    val ctxForExit = LocalContext.current
-    var lastBackAt by remember { mutableStateOf(0L) }
-    BackHandler(enabled = !hasOverlay() && editingCourse == null && currentTab != Tab.Schedule) {
-        currentTab = Tab.Schedule
-    }
-    BackHandler(enabled = !hasOverlay() && editingCourse == null && currentTab == Tab.Schedule) {
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (now - lastBackAt < 2000L) {
-            (ctxForExit as? android.app.Activity)?.finish()
-        } else {
-            lastBackAt = now
-            android.widget.Toast.makeText(
-                ctxForExit, R.string.exit_press_back_again, Toast.LENGTH_SHORT
-            ).show()
+    // 外部导入文本 → 切管理页(与旧实现等价,语义不变)。
+    var autoImportTriggered by remember { mutableStateOf(false) }
+    LaunchedEffect(pendingImportText) {
+        if (!autoImportTriggered && pendingImportText != null) {
+            autoImportTriggered = true
+            currentTab = Tab.Manage
         }
     }
 
-    // 例外(§1.3): AddCourse(编辑/新增课程会话)不纳入 SaveableStateProvider —
-    // 编辑课程会话在旋转/进程恢复时安全丢弃是有意设计(overlayStack saver 同款例外):
-    // CourseEntity 无法 Bundle 化, 若恢复进空表单, 用户会误当成新课程重复添加。
-    // 故此分支保持裸组合, 表单状态随覆盖销毁。
-    if (topOverlay() == OverlayScreen.AddCourse || editingCourse != null) {
-        AddCourseScreen(onBack = { popOverlay(); editingCourse = null }, onSaved = { popOverlay(); editingCourse = null; currentTab = Tab.Schedule }, editingCourse = editingCourse)
-        return
-    }
-    if (topOverlay() == OverlayScreen.AllTables) {
-        saveableStateHolder.SaveableStateProvider("AllTables") {
-            AllTablesScreen(onBack = { popOverlay() }, onCreateNewTable = {
-                mainScope.launch {
-                    val previousId = mainVm.state.value.currentTable?.id
-                    val newId = mainVm.createEmptyTable(commitSelection = false)
-                    previousDefaultTableId = previousId; pendingNewTableId = newId; editTableId = newId; pushOverlay(OverlayScreen.EditTable)
-                }
-            }, onOpenEditTable = { tableId -> editTableId = tableId; pendingNewTableId = null; pushOverlay(OverlayScreen.EditTable) })
-        }
-        return
-    }
-    if (topOverlay() == OverlayScreen.EditTable) {
-        saveableStateHolder.SaveableStateProvider("EditTable") {
-            EditTableScreen(tableId = editTableId, pendingNewTableId = pendingNewTableId, onBack = { popOverlay(); editTableId = null; pendingNewTableId = null; previousDefaultTableId = null }, onDiscardPending = {
-                val discardId = pendingNewTableId; val fallback = previousDefaultTableId; pendingNewTableId = null; previousDefaultTableId = null
-                if (discardId != null) mainVm.discardNewTable(discardId, fallback)
-                popOverlay(); editTableId = null
-            }, onSaved = { popOverlay(); editTableId = null; pendingNewTableId = null; previousDefaultTableId = null }, onDeleted = { popOverlay(); editTableId = null; currentTab = Tab.Schedule })
-        }
-        return
-    }
-    if (topOverlay() == OverlayScreen.Theme) {
-        saveableStateHolder.SaveableStateProvider("Theme") {
-            AppearanceScreen(onBack = { popOverlay() }, themeMode = themeMode, onThemeModeChange = onThemeModeChange)
-        }
-        return
-    }
-    if (topOverlay() == OverlayScreen.General) {
-        saveableStateHolder.SaveableStateProvider("General") {
-            GeneralSettingsScreen(
-                onBack = { popOverlay() },
-                onOpenHoliday = { pushOverlay(OverlayScreen.Holiday) },
-                onOpenWidgetManagement = { pushOverlay(OverlayScreen.WidgetManagement) },
-                navDock = navDock,
-                onNavDockChange = { navDock = it }
-            )
-        }
-        return
-    }
-    if (topOverlay() == OverlayScreen.Holiday) {
-        saveableStateHolder.SaveableStateProvider("Holiday") {
-            HolidaySettingsScreen(onBack = { popOverlay() })
-        }
-        return
-    }
-    if (topOverlay() == OverlayScreen.Export) {
-        saveableStateHolder.SaveableStateProvider("Export") {
-            ExportScreen(onBack = { popOverlay() })
-        }
-        return
-    }
-    if (topOverlay() == OverlayScreen.Reminder) {
-        saveableStateHolder.SaveableStateProvider("Reminder") {
-            ReminderScreen(onBack = { popOverlay() })
-        }
-        return
-    }
-    if (topOverlay() == OverlayScreen.About) {
-        saveableStateHolder.SaveableStateProvider("About") {
-            AboutScreen(onBack = { popOverlay() }, onOpenLicense = { pushOverlay(OverlayScreen.License) })
-        }
-        return
-    }
-    if (topOverlay() == OverlayScreen.License) {
-        saveableStateHolder.SaveableStateProvider("License") {
-            LicenseScreen(onBack = { popOverlay() })
-        }
-        return
-    }
-    // widgetEditId 持久化(Int): 旋转/进程恢复后仍能定位具体 widget —
-    // Int 可 Bundle 化, 与上面 editTableId/pendingNewTableId 同款处理。
-    if (topOverlay() == OverlayScreen.WidgetManagement) {
-        saveableStateHolder.SaveableStateProvider("WidgetManagement") {
-            WidgetManagementScreen(
-                onBack = { popOverlay() },
-                onSelect = { widgetId -> widgetEditId = widgetId; pushOverlay(OverlayScreen.WidgetEdit) }
-            )
-        }
-        return
-    }
-    if (topOverlay() == OverlayScreen.WidgetEdit) {
-        saveableStateHolder.SaveableStateProvider("WidgetEdit") {
-            WidgetEditScreen(
-                widgetId = widgetEditId ?: -1,
-                onBack = { popOverlay(); widgetEditId = null }
-            )
-        }
-        return
-    }
-    // issue#40: 独立时间节次表管理页 + 编辑页 — 返回栈逐层弹, 与 EditTable 同款
-    if (topOverlay() == OverlayScreen.PeriodTables) {
-        saveableStateHolder.SaveableStateProvider("PeriodTables") {
-            com.lingion.sleepy.ui.screen.mine.PeriodTablesScreen(
-                onBack = { popOverlay() },
-                onOpenEdit = { periodId ->
-                    editPeriodTableId = periodId
-                    // 新建路径由管理页标记 pendingNewPeriodTableId, 编辑页据此丢弃未保存残留
-                    pushOverlay(OverlayScreen.PeriodTableEdit)
-                },
-                onCreateNew = { newId ->
-                    pendingNewPeriodTableId = newId; editPeriodTableId = newId; pushOverlay(OverlayScreen.PeriodTableEdit)
-                }
-            )
-        }
-        return
-    }
-    if (topOverlay() == OverlayScreen.PeriodTableEdit) {
-        saveableStateHolder.SaveableStateProvider("PeriodTableEdit") {
-            com.lingion.sleepy.ui.screen.mine.PeriodTableEditScreen(
-                periodTableId = editPeriodTableId ?: -1L,
-                isNewUnsaved = editPeriodTableId == pendingNewPeriodTableId && pendingNewPeriodTableId != null,
-                onBack = { popOverlay(); editPeriodTableId = null; pendingNewPeriodTableId = null }
-            )
-        }
-        return
-    }
-
-    // 底栏双形态(用户 2026-09-04 定版):
-    // 贴底 = Scaffold bottomBar 占位(原样, 内容止于栏上沿);
-    // Dock = iOS/Mac 语义悬浮药丸 — 内容 fillMaxSize 通到屏幕底, Dock 悬浮于内容
-    // 上一层(FAB 式 overlay), 各页滚动容器经 LocalNavExtraBottomPadding 拿 Dock 总高
-    // 加滚动余量, 保证最后一项能滚到 Dock 上方完全可见。
-    val navItems = Tab.entries.map { com.lingion.sleepy.ui.component.PillNavItemSpec(it.icon, stringResource(it.labelRes)) }
-
-    // Dock 滚动余量: 理论估算兜底(首帧前), overlay 实测高(dockOverlayPx)到位后覆盖 —
-    // 猜值必小于真值(手势条 inset 因机型而异), 实测保证「最后一项能滚到 Dock 上方」
-    var dockExtraDp by remember { mutableStateOf(NavDockSpec.capsuleHeight + NavDockSpec.bottomFloat) }
-
-    if (!navDock) {
-        androidx.compose.material3.Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            containerColor = SleepyTheme.colors.background,
-            bottomBar = {
-                PillNavigationBar(
-                    items = navItems,
-                    selectedIndex = currentTab.ordinal,
-                    onSelect = { currentTab = Tab.entries[it] },
-                    dock = false
-                )
+    SleepyNavHost(
+        nav = nav,
+        navigator = navigator,
+        currentTab = currentTab,
+        setCurrentTab = { currentTab = it },
+        navDock = navDock,
+        onNavDockChange = { navDock = it },
+        scheduleViewMode = scheduleViewMode,
+        onScheduleViewModeChange = { scheduleViewMode = it },
+        themeMode = themeMode,
+        onThemeModeChange = onThemeModeChange,
+        deepLinkCourse = deepLinkCourse,
+        onDeepLinkConsumed = onDeepLinkConsumed,
+        mainVm = mainVm,
+        mainScope = mainScope,
+        onCreateNewTable = {
+            mainScope.launch {
+                val previousId = mainVm.state.value.currentTable?.id ?: NavSession.NO_ID
+                val newId = mainVm.createEmptyTable(commitSelection = false)
+                navigator.openEditTable(tableId = newId, pendingNew = newId, prevDefault = previousId)
             }
-        ) { padding ->
-            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-                MainTabs(
-                    currentTab = currentTab,
-                    setCurrentTab = { currentTab = it },
-                    pushOverlay = ::pushOverlay,
-                    editingCourse = { editingCourse = it },
-                    viewMode = scheduleViewMode,
-                    onViewModeChange = { scheduleViewMode = it },
-                    onCreateNewTable = {
-                        mainScope.launch {
-                            val previousId = mainVm.state.value.currentTable?.id
-                            val newId = mainVm.createEmptyTable(commitSelection = false)
-                            previousDefaultTableId = previousId; pendingNewTableId = newId; editTableId = newId; pushOverlay(OverlayScreen.EditTable)
-                        }
-                    },
-                    onCreateNewPeriodTable = { newId ->
-                        pendingNewPeriodTableId = newId; editPeriodTableId = newId; pushOverlay(OverlayScreen.PeriodTableEdit)
-                    },
-                    holder = saveableStateHolder
-                )
-            }
-        }
-    } else {
-        // Dock 模式: 无 bottomBar 占位 — 内容通底; Dock 悬浮层 Align.BottomCenter 叠加
-        // 顶部: 裸 Box 没有 Scaffold 的 contentWindowInsets, 必须显式补 statusBars inset
-        // (此前丢失 → 课表顶栏顶进摄像头挖孔区); 底部不加 — 内容延伸到最底是 Dock 语义
-        androidx.compose.foundation.layout.Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(SleepyTheme.colors.background)
-                .windowInsetsPadding(WindowInsets.statusBars)
-        ) {
-            androidx.compose.runtime.CompositionLocalProvider(
-                com.lingion.sleepy.ui.component.LocalNavExtraBottomPadding provides dockExtraDp
-            ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    MainTabs(
-                        currentTab = currentTab,
-                        setCurrentTab = { currentTab = it },
-                        pushOverlay = ::pushOverlay,
-                        editingCourse = { editingCourse = it },
-                        viewMode = scheduleViewMode,
-                        onViewModeChange = { scheduleViewMode = it },
-                        onCreateNewTable = {
-                            mainScope.launch {
-                                val previousId = mainVm.state.value.currentTable?.id
-                                val newId = mainVm.createEmptyTable(commitSelection = false)
-                                previousDefaultTableId = previousId; pendingNewTableId = newId; editTableId = newId; pushOverlay(OverlayScreen.EditTable)
-                            }
-                        },
-                        onCreateNewPeriodTable = { newId ->
-                            pendingNewPeriodTableId = newId; editPeriodTableId = newId; pushOverlay(OverlayScreen.PeriodTableEdit)
-                        },
-                        holder = saveableStateHolder
-                    )
-                }
-            }
-            var dockOverlayPx by remember { mutableStateOf(0) }
-            val densityForDock = LocalDensity.current
-            if (dockOverlayPx > 0) {
-                dockExtraDp = with(densityForDock) { dockOverlayPx.toDp() }
-            }
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .onGloballyPositioned { c -> dockOverlayPx = c.size.height }
-            ) {
-                PillNavigationBar(
-                    items = navItems,
-                    selectedIndex = currentTab.ordinal,
-                    onSelect = { currentTab = Tab.entries[it] },
-                    dock = true
-                )
-            }
-        }
-    }
+        },
+    )
 }
 
 @Composable
-private fun MainTabs(
+internal fun MainTabs(
     currentTab: Tab,
     setCurrentTab: (Tab) -> Unit,
-    pushOverlay: (OverlayScreen) -> Unit,
-    editingCourse: (CourseEntity?) -> Unit,
+    navigator: SleepyNavigator,
+    mainVm: ScheduleViewModel,
+    mainScope: CoroutineScope,
     viewMode: ViewMode,
     onViewModeChange: (ViewMode) -> Unit,
     onCreateNewTable: () -> Unit,
-    onCreateNewPeriodTable: (Long) -> Unit = {},
     holder: SaveableStateHolder
 ) {
     // tab 往返滚动位置保真: when 条件组合同样整页移除被切走的 tab, 各 tab 内容包
     // SaveableStateProvider(currentTab.name) — key 稳定(tab 枚举名), 返回时恢复。
     // 注意: scheduleViewMode 会话态仍由 AppRoot 持有(§1.4 契约), 此处只管组合作用域。
+    val nav = navigator.navController
+    val session = navigator.session
     val draftScope = rememberCoroutineScope()
     when (currentTab) {
         Tab.Schedule -> holder.SaveableStateProvider(currentTab.name) {
@@ -561,12 +291,12 @@ private fun MainTabs(
                 viewMode = viewMode,
                 onViewModeChange = onViewModeChange,
                 onGoImport = { MainActivity.autoShowImportOnceState.value = true; setCurrentTab(Tab.Manage) },
-                onManualAdd = { pushOverlay(OverlayScreen.AddCourse) },
+                onManualAdd = { navigator.openAddCourse() },
                 onCreateTable = onCreateNewTable,
-                onEditCourse = { course -> editingCourse(course) })
+                onEditCourse = { course -> session.beginEditCourse(course); navigator.openAddCourse(course.id, editing = true) })
         }
         Tab.Today -> holder.SaveableStateProvider(currentTab.name) {
-            TodayScreen(onEditCourse = { course -> editingCourse(course) })
+            TodayScreen(onEditCourse = { course -> session.beginEditCourse(course); navigator.openAddCourse(course.id, editing = true) })
         }
         Tab.Manage -> holder.SaveableStateProvider(currentTab.name) {
             val ctx = LocalContext.current
@@ -586,8 +316,8 @@ private fun MainTabs(
             ManagementPage(autoShowImportSheet = autoOnce || MainActivity.pendingImportText != null, onJwImportRequested = { ctx.startActivity(Intent(ctx, com.lingion.sleepy.ui.screen.imports.JwImportActivity::class.java)) }, onCreateNewTableRequested = onCreateNewTable,
                 // v1.0.56 T7: 新建作息表卡 — ManagementPage 内部建表(自动唯一命名)后回调带新 id,
                 // 与 PeriodTablesScreen 新建按钮同一套 pendingNew discard 残留语义
-                onCreateNewPeriodTableRequested = onCreateNewPeriodTable,
-                onManualAdd = { pushOverlay(OverlayScreen.AddCourse) }, onEditCurrentTable = { pushOverlay(OverlayScreen.EditTable) }, onExportRequested = { pushOverlay(OverlayScreen.Export) },
+                onCreateNewPeriodTableRequested = { newId -> navigator.createPeriodTableAndEdit(newId) },
+                onManualAdd = { navigator.openAddCourse() }, onEditCurrentTable = { navigator.openEditTable() }, onExportRequested = { navigator.openExport() },
                 drafts = drafts,
                 onRestoreDraft = { id ->
                     ctx.startActivity(Intent(ctx, JwImportActivity::class.java).putExtra(JwImportActivity.EXTRA_DRAFT_ID, id))
@@ -601,13 +331,13 @@ private fun MainTabs(
         }
         Tab.Mine -> holder.SaveableStateProvider(currentTab.name) {
             MineScreen(
-                onOpenAllTables = { pushOverlay(OverlayScreen.AllTables) },
-                onOpenPeriodTables = { pushOverlay(OverlayScreen.PeriodTables) },
-                onOpenAppearance = { pushOverlay(OverlayScreen.Theme) },
-                onOpenGeneral = { pushOverlay(OverlayScreen.General) },
-                onOpenExport = { pushOverlay(OverlayScreen.Export) },
-                onOpenReminder = { pushOverlay(OverlayScreen.Reminder) },
-                onOpenAbout = { pushOverlay(OverlayScreen.About) })
+                onOpenAllTables = { navigator.openAllTables() },
+                onOpenPeriodTables = { navigator.openPeriodTables() },
+                onOpenAppearance = { navigator.openAppearance() },
+                onOpenGeneral = { navigator.openGeneral() },
+                onOpenExport = { navigator.openExport() },
+                onOpenReminder = { navigator.openReminder() },
+                onOpenAbout = { navigator.openAbout() })
         }
     }
 }
