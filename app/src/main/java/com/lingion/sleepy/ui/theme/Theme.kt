@@ -3,7 +3,9 @@ package com.lingion.sleepy.ui.theme
 import android.os.Build
 import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.TextFieldColors
@@ -539,8 +541,16 @@ fun SleepyThemeProvider(
                 onDispose { }
             }
         }
-        MaterialTheme(colorScheme = m3Scheme) {
-            content()
-        }
+        // MD3E: MaterialExpressiveTheme 一次性注入 expressive motion scheme —— 全部 Material
+        // 组件(按钮/Switch/BottomSheet/Dialog/…)的时长与曲线统一换成 spring(空间类可回弹,
+        // 色彩/透明度类阻尼 1.0 不回弹),自研组件用 MaterialTheme.motionScheme.<spec>() 取同一套值。
+        // typography/shapes 显式传 Sleepy 值(与 M3 baseline 逐项相同),避免依赖主题默认值漂移。
+        MaterialExpressiveTheme(
+            colorScheme = m3Scheme,
+            motionScheme = MotionScheme.expressive(),
+            shapes = SleepyShapes,
+            typography = SleepyTypography,
+            content = content,
+        )
     }
 }
