@@ -398,6 +398,12 @@
     <string name="jw_err_ucas_sep_portal">Todavía está en el portal SEP de la UCAS. Tras iniciar sesión, abra "Sistema de Selección de Cursos" en la lista de aplicaciones e importe en la página del horario</string>
     <string name="jw_err_session_expired">Sesión caducada. Inicie sesión de nuevo en la página y vuelva a tocar «Importar esta página»</string>
     <string name="jw_err_dismiss">Entendido</string>
+    <string name="jw_error_dialog_title">Problema de importación</string>
+    <string name="jw_diag_export_btn">Exportar paquete de diagnóstico</string>
+    <string name="jw_diag_exporting">Generando paquete de diagnóstico…</string>
+    <string name="jw_diag_export_saved">Guardado en Download/Sleepy/教务日志/%1$s</string>
+    <string name="jw_diag_export_failed">Error al generar el paquete: %1$s</string>
+    <string name="jw_diag_export_chooser">Compartir paquete de diagnóstico</string>
     <string name="jw_err_empty_semester">No hay cursos este semestre. Confirme que seleccionó el semestre correcto; los horarios en imagen no se pueden importar</string>
     <string name="jw_import_success">%1$d cursos importados exitosamente</string>
     <string name="jw_parse_failed">Error de análisis: %1$s</string>

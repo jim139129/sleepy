@@ -398,6 +398,12 @@
     <string name="jw_err_ucas_sep_portal">まだ UCAS SEP ポータルページにいます。ログイン後、アプリ一覧から「履修登録システム」を開き、時間割ページでインポートしてください</string>
     <string name="jw_err_session_expired">セッションが期限切れです。ページで再度ログインしてから「このページをインポート」をタップしてください</string>
     <string name="jw_err_dismiss">了解</string>
+    <string name="jw_error_dialog_title">インポート中に問題が発生しました</string>
+    <string name="jw_diag_export_btn">診断パッケージをエクスポート</string>
+    <string name="jw_diag_exporting">診断パッケージを生成中…</string>
+    <string name="jw_diag_export_saved">Download/Sleepy/教务日志/%1$s に保存しました</string>
+    <string name="jw_diag_export_failed">パッケージの生成に失敗: %1$s</string>
+    <string name="jw_diag_export_chooser">診断パッケージを共有</string>
     <string name="jw_err_empty_semester">今学期の授業はありません。正しい学期を選択したか確認してください。画像形式の時間割はインポートできません</string>
     <string name="jw_import_success">%1$d 件の授業をインポートしました</string>
     <string name="jw_parse_failed">解析失敗：%1$s</string>

@@ -415,6 +415,12 @@
     <string name="jw_err_ucas_sep_portal">You are still on the UCAS SEP portal page. After signing in, open "Course Selection System" from the app list, then import on the timetable page</string>
     <string name="jw_err_session_expired">Session expired. Please log in again on the page, then tap "Import this page"</string>
     <string name="jw_err_dismiss">Dismiss</string>
+    <string name="jw_error_dialog_title">Import Problem</string>
+    <string name="jw_diag_export_btn">Export Diagnostic Package</string>
+    <string name="jw_diag_exporting">Generating diagnostic package…</string>
+    <string name="jw_diag_export_saved">Saved to Download/Sleepy/教务日志/%1$s</string>
+    <string name="jw_diag_export_failed">Failed to generate package: %1$s</string>
+    <string name="jw_diag_export_chooser">Share Diagnostic Package</string>
     <string name="jw_err_empty_semester">No courses this semester. Please confirm the correct semester is selected; image-based timetables cannot be imported</string>
     <string name="jw_import_success">Successfully imported %1$d courses</string>
     <string name="jw_parse_failed">Parse failed: %1$s</string>

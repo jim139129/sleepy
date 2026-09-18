@@ -111,8 +111,9 @@ internal const val DESKTOP_VIEWPORT_JS =
 fun JwWebViewLoginScreen(
     school: JwSchoolInfo,
     onHtmlCaptured: (html: String, school: JwSchoolInfo, periods: List<Triple<Int, String, String>>, termStartDate: String) -> Unit,
-    onCaptureError: (status: FrameCaptureStatus, hint: String) -> Unit,
+    onCaptureError: (result: FrameCaptureResult, hint: String) -> Unit,
     onBack: () -> Unit,
+    onWebViewReady: ((WebView) -> Unit)? = null,
     viewModel: JwImportViewModel = viewModel()
 ) {
     val colors = SleepyTheme.colors
@@ -142,7 +143,12 @@ fun JwWebViewLoginScreen(
             if (obj.optBoolean("ok", false)) {
                 val data = obj.optString("data", "")
                 if (data.isBlank()) {
-                    scope.launch { snackbar.showSnackbar(fetchFailedNoResponseMsg) }
+                    onCaptureError(
+                        FrameCaptureResult(null, "", emptyList(),
+                            status = FrameCaptureStatus.UNKNOWN,
+                            diagnosticHint = fetchFailedNoResponseMsg),
+                        fetchFailedNoResponseMsg,
+                    )
                 } else {
                     // 解析 periods 数组（节次时间）
                     val periods = mutableListOf<Triple<Int, String, String>>()
@@ -193,11 +199,22 @@ fun JwWebViewLoginScreen(
                 }
             } else {
                 val err = obj.optString("err", "")
-                scope.launch { snackbar.showSnackbar(fetchFailedFmt.format(err.ifBlank { pageNotLoadedMsg })) }
+                val msg = fetchFailedFmt.format(err.ifBlank { pageNotLoadedMsg })
+                onCaptureError(
+                    FrameCaptureResult(null, "", emptyList(),
+                        status = FrameCaptureStatus.UNKNOWN,
+                        diagnosticHint = msg),
+                    msg,
+                )
             }
         } catch (e: Exception) {
             Log.e("JwWebView", "parse wisedu result failed", e)
-            scope.launch { snackbar.showSnackbar(fetchFormatErrorMsg) }
+            onCaptureError(
+                FrameCaptureResult(null, "", emptyList(),
+                    status = FrameCaptureStatus.UNKNOWN,
+                    diagnosticHint = fetchFormatErrorMsg),
+                fetchFormatErrorMsg,
+            )
         }
     }
 
@@ -213,7 +230,12 @@ fun JwWebViewLoginScreen(
         wv.postDelayed({
             if (!answered) {
                 Log.w("JwWebView", "fetch js timeout token=$beginToken")
-                scope.launch { snackbar.showSnackbar(fetchTimeoutMsg) }
+                onCaptureError(
+                    FrameCaptureResult(null, "", emptyList(),
+                        status = FrameCaptureStatus.CONTAINER_EMPTY_AFTER_DELAY,
+                        diagnosticHint = fetchTimeoutMsg),
+                    fetchTimeoutMsg,
+                )
             }
         }, FETCH_TIMEOUT_MS)
     }
@@ -292,7 +314,12 @@ fun JwWebViewLoginScreen(
                     val wv = webViewRef
                     if (wv == null) {
                         Log.w("JwWebView", "capture tapped but webViewRef is null")
-                        scope.launch { snackbar.showSnackbar(webviewNotReadyMsg) }
+                        onCaptureError(
+                            FrameCaptureResult(null, "", emptyList(),
+                                status = FrameCaptureStatus.UNKNOWN,
+                                diagnosticHint = webviewNotReadyMsg),
+                            webviewNotReadyMsg,
+                        )
                         return@CaptureBar
                     }
                     val url = wv.url ?: ""
@@ -405,7 +432,7 @@ fun JwWebViewLoginScreen(
                             FrameCaptureStatus.IFRAME_NAV_PENDING,
                             FrameCaptureStatus.WRONG_PAGE,
                             FrameCaptureStatus.UNKNOWN ->
-                                onCaptureError(r.status, hint)    // 不走 onHtmlCaptured, 避免伪"0 课"
+                                onCaptureError(r, hint)    // 不走 onHtmlCaptured, 避免伪"0 课"
                         }
                     }
                 }
@@ -426,7 +453,8 @@ fun JwWebViewLoginScreen(
                 onProgressChange = { p -> progress = p },
                 onWebViewCreated = { wv -> webViewRef = wv },
                 onHtmlCaptured = { html -> onHtmlCaptured(html, school, emptyList(), "") },
-                onWiseduResult = handleWiseduResult
+                onWiseduResult = handleWiseduResult,
+                onWebViewReady = onWebViewReady
             )
 
             if (progress in 1..99) {
@@ -460,7 +488,8 @@ private fun JwWebView(
     onProgressChange: (Int) -> Unit,
     onWebViewCreated: (WebView) -> Unit,
     onHtmlCaptured: (String) -> Unit,
-    onWiseduResult: (String) -> Unit = {}
+    onWiseduResult: (String) -> Unit = {},
+    onWebViewReady: ((WebView) -> Unit)? = null
 ) {
     // key 含 recreateKey: UA 切换时销毁重建 WebView (userAgentString 仅创建期可靠,
     // 部分页面在 onPageStarted 后改 UA 不回读); CookieManager 全局共享, 登录态不丢
@@ -503,6 +532,7 @@ private fun JwWebView(
                     }
                     override fun onConsoleMessage(msg: android.webkit.ConsoleMessage?): Boolean {
                         Log.d("JwWebView", "console[${msg?.messageLevel()}]: ${msg?.message()}")
+                        JwDiagnosticSession.recordConsole(msg)
                         return true
                     }
                 }
@@ -516,6 +546,7 @@ private fun JwWebView(
                 }
                 loadUrl(lastUrl)
                 onWebViewCreated(this)
+                onWebViewReady?.invoke(this)
             }
         }
     )
@@ -1837,6 +1868,63 @@ private const val CAPTURE_FRAMES_JS_TEMPLATE = """
   var out = [];
   walk(window, 0, [], out);
   return JSON.stringify({ok:true, url:location.href, depth:maxDepth, frames:out});
+})
+"""
+
+/**
+ * 排查包专用 — DOM 可点元素清单 (issue #45 现场报告反循)。
+ * 失败弹窗触发点 evaluateJavascript(本 JS) — 报告学生当时看的页面。
+ * 输出 JSON: {url, items:[{tag, id, name, type, text, onclick, href, disabled, hidden}], counts:{byTag:{}}}
+ * 不跨 frame (与 CAPTURE_FRAMES_JS 配套, 后者在 frames/ 落 outerHTML)
+ * 不动登录密码字段 — 1B 完全不脱敏,字段原文保留供排查 EID/UID 异常。
+ */
+const val DOM_INVENTORY_JS = """
+(function(){
+  function safe(t){return t==null?'':String(t);}
+  function cls(el){return el && el.className ? String(el.className) : '';}
+  function attrs(el){
+    var o = {};
+    try {
+      var attrs = el.attributes || [];
+      for (var i=0;i<attrs.length;i++){
+        var a = attrs[i];
+        if (a && a.specified !== false) o[a.name] = safe(a.value).slice(0,200);
+      }
+    } catch(e){}
+    return o;
+  }
+  var CLICKABLE = ['a','button','input','select','textarea','label'];
+  var items = [];
+  var byTag = {};
+  for (var i=0;i<CLICKABLE.length;i++){
+    var tag = CLICKABLE[i];
+    var nodes;
+    try { nodes = document.getElementsByTagName(tag); } catch(e){ nodes = []; }
+    for (var j=0;j<nodes.length;j++){
+      var el = nodes[j];
+      var rect = null;
+      try { rect = el.getBoundingClientRect(); } catch(e){}
+      if (rect && (rect.width===0 && rect.height===0)) continue;  // 跳过零尺寸隐藏控件
+      var text = '';
+      try { text = (el.innerText || el.textContent || el.value || '').replace(/\\s+/g,' ').trim().slice(0,120); } catch(e){}
+      items.push({
+        tag: tag,
+        id: safe(el.id),
+        name: safe(el.name),
+        type: safe(el.type),
+        text: text,
+        cls: cls(el),
+        href: el.getAttribute ? safe(el.getAttribute('href')) : '',
+        onclick: el.getAttribute ? safe(el.getAttribute('onclick')) : '',
+        disabled: !!el.disabled,
+        hidden: !!el.hidden || safe(el.style && el.style.display)==='none',
+        rect: rect ? {x:Math.round(rect.x),y:Math.round(rect.y),w:Math.round(rect.width),h:Math.round(rect.height)} : null,
+        attrs: attrs(el)
+      });
+    }
+    byTag[tag] = nodes.length;
+  }
+  return JSON.stringify({url:location.href, total:items.length, byTag:byTag, items:items});
 })
 """
 
