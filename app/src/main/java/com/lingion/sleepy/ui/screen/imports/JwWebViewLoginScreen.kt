@@ -1928,6 +1928,52 @@ const val DOM_INVENTORY_JS = """
 })
 """
 
+/**
+ * 排查包专用 — Web Storage 全量 (2026-09-18 用户: 排查包信息量对齐桌面 collector 5-storage/)。
+ * sessionStorage + localStorage 全键值, 1B 不脱敏 — 学号/token 明文恰是排查材料。
+ * 不跨 frame (storage 按 origin 隔离, 当前文档 origin 即可)。
+ */
+const val STORAGE_JS = """
+(function(){
+  var out = {sessionStorage:{}, localStorage:{}, url:location.href};
+  ['sessionStorage','localStorage'].forEach(function(sn){
+    try {
+      var st = window[sn]; var m = {};
+      if (st) { for (var i=0;i<st.length;i++){ var k=st.key(i); try{ m[k]=String(st.getItem(k)); }catch(e){} } }
+      out[sn] = m;
+    } catch(e) {}
+  });
+  return JSON.stringify(out);
+})
+"""
+
+/**
+ * 排查包专用 — 页面链接/表单动作全集 (对标桌面 collector jsLinks/jsSelects)。
+ * a[href]/iframe[src]/form[action] 绝对化 → 适配者看导航面; select 枚举 → 学期码全集。
+ */
+const val LINKS_JS = """
+(function(){
+  function abs(h){ try { return new URL(h, location.href).href; } catch(e){ return h; } }
+  var seen={}, links=[];
+  var els=document.querySelectorAll('a[href],iframe[src],form[action]');
+  for (var i=0;i<els.length;i++){
+    var h=els[i].getAttribute('href')||els[i].getAttribute('src')||els[i].getAttribute('action')||'';
+    if ((h.indexOf('http')===0||h.charAt(0)==='/') && !seen[h]) { seen[h]=1; links.push(abs(h)); }
+  }
+  var selects=[];
+  var ss=document.querySelectorAll('select');
+  for (var s=0;s<ss.length;s++){
+    var opts=[];
+    var os=ss[s].querySelectorAll('option');
+    for (var o=0;o<os.length;o++){
+      opts.push({v: os[o].getAttribute('value')||'', t: (os[o].textContent||'').trim().slice(0,60)});
+    }
+    if (opts.length) selects.push({sel:s, name: ss[s].getAttribute('name')||'', id: ss[s].id||'', opts: opts});
+  }
+  return JSON.stringify({url:location.href, links:links, selects:selects});
+})
+"""
+
 /** 单次抓取: evaluateJavascript → FrameSnapshot.fromJson → selectBestFrame。回调已在主线程。 */
 private fun captureOnce(wv: WebView, onResult: (FrameCaptureResult) -> Unit) {
     wv.evaluateJavascript(

@@ -110,6 +110,48 @@ class JwCaptureDumpContentTest {
             error("entry not found: $name")
         }
 
+    @Test
+    fun buildZip_contains_desktop_level_diagnostic_sections_and_manifest() {
+        val bytes = JwCaptureDump.buildZip(
+            ctx = androidContext(),
+            school = stubSchool(),
+            result = stubResult(),
+            domInventoryJson = "{}",
+            cookiesFull = "sid=full-cookie-value; uid=202501",
+            storageJson = "{\"localStorage\":{\"token\":\"full-token\"}}",
+            linksJson = "{\"links\":[\"https://xju.edu.cn/schedule\"],\"selects\":[{\"opts\":[{\"v\":\"2025-2026\"}]}]}",
+        )
+        val names = zipNames(bytes)
+        assertTrue("desktop parity: INDEX.txt", names.contains("INDEX.txt"))
+        assertTrue("desktop parity: full cookies", names.contains("cookies-full.txt"))
+        assertTrue("desktop parity: storage", names.contains("5-storage/storage.json"))
+        assertTrue("desktop parity: links/selects", names.contains("2-inline/links.json"))
+        assertTrue("device environment", names.contains("env/device.txt"))
+        assertTrue("manifest must list all files", readEntry(bytes, "INDEX.txt").contains("cookies-full.txt"))
+        assertTrue("cookie value must remain unredacted", readEntry(bytes, "cookies-full.txt").contains("full-cookie-value"))
+        assertTrue("storage value must remain unredacted", readEntry(bytes, "5-storage/storage.json").contains("full-token"))
+    }
+
+    @Test
+    fun buildZip_writes_all_frame_snapshots_when_available() {
+        val result = stubResult().copy(allFrames = listOf(
+            "(top)" to "<html>top</html>",
+            "(top)_PageFrame" to "<html>孙冬璞 frame</html>",
+        ))
+        val names = zipNames(JwCaptureDump.buildZip(null, stubSchool(), result, null))
+        assertTrue("all frame html must be exported", names.count { it.startsWith("frames/") } >= 2)
+    }
+
+    private fun zipNames(bytes: ByteArray): Set<String> = buildSet {
+        ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
+            while (true) {
+                val e = zis.nextEntry ?: break
+                add(e.name)
+                zis.closeEntry()
+            }
+        }
+    }
+
     private fun readEntryStartsWith(bytes: ByteArray, prefix: String): String? {
         val zis = ZipInputStream(ByteArrayInputStream(bytes))
         try {

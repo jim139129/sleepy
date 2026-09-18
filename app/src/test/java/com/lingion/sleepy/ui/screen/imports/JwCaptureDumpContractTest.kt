@@ -91,4 +91,30 @@ class JwCaptureDumpContractTest {
         assertTrue("summary 必须含 diagnosticHint", source.contains("diagnosticHint"))
         assertTrue("summary 必须含 retryCount", source.contains("retryCount"))
     }
+
+    /** 2026-09-18 用户: 排查包必须与桌面 collector 同级或更全面 — 不是几 KB 的薄包。 */
+    @Test
+    fun dump_matches_desktop_collector_parity() {
+        assertTrue("必须有 INDEX.txt 清单(桌面 collector 对标)", source.contains("INDEX.txt"))
+        assertTrue("必须有 cookies-full.txt 全量 Cookie", source.contains("cookies-full.txt"))
+        assertTrue("必须有 5-storage/ Web Storage", source.contains("5-storage/"))
+        assertTrue("必须有 2-inline/links.json 链接+下拉枚举", source.contains("2-inline/links.json"))
+        assertTrue("必须有 env/device.txt 设备环境", source.contains("env/device.txt"))
+        assertTrue("必须有全帧落盘 allFrames", Regex("""allFrames""").containsMatchIn(source))
+        assertTrue("LoginScreen 必须有 STORAGE_JS 常量", loginScreen.contains("STORAGE_JS"))
+        assertTrue("LoginScreen 必须有 LINKS_JS 常量", loginScreen.contains("LINKS_JS"))
+    }
+
+    /** 导出时必须现场抓 Cookie 全量值(CookieManager.getCookie) — 1B 不脱敏。 */
+    @Test
+    fun export_flow_grabs_cookies_storage_links() {
+        val activity: String = sequenceOf(
+            File("app/src/main/java/com/lingion/sleepy/ui/screen/imports/JwImportActivity.kt"),
+            File("src/main/java/com/lingion/sleepy/ui/screen/imports/JwImportActivity.kt"),
+        ).firstOrNull { it.isFile }?.readText() ?: error("Unable to load JwImportActivity.kt source")
+        assertTrue("导出必须抓 CookieManager.getCookie 全量值", activity.contains("CookieManager"))
+        assertTrue("导出必须现抓 STORAGE_JS", activity.contains("STORAGE_JS"))
+        assertTrue("导出必须现抓 LINKS_JS", activity.contains("LINKS_JS"))
+        assertTrue("导出必须传 cookiesFull/storageJson/linksJson 给 exportDump", Regex("""exportDump\s*\([^)]*cookiesFull""", RegexOption.DOT_MATCHES_ALL).containsMatchIn(activity))
+    }
 }

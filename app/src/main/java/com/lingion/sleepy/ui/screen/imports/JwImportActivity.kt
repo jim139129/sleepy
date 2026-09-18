@@ -190,16 +190,17 @@ class JwImportActivity : ComponentActivity() {
                     val wv = webViewForDump
                     val ctx = this
                     scope.launch {
-                        val inventoryJson: String? = wv?.let { webView ->
+                        // 现场抓取辅助 — 页面还在, 弹窗不关页: DOM 清单 + Storage + Links
+                        // 三段 JS 顺序跑 (同 main thread 串行, evaluateJavascript 回调顺序有保)
+                        suspend fun evalJs(js: String): String? = wv?.let { webView ->
                             withContext(Dispatchers.Main) {
                                 suspendCancellableCoroutine { cont ->
-                                    webView.evaluateJavascript(DOM_INVENTORY_JS) { raw ->
+                                    webView.evaluateJavascript(js) { raw ->
                                         cont.resumeWith(
                                             Result.success(
                                                 if (raw.isNullOrEmpty() || raw == "null") null
                                                 else runCatching {
-                                                    val v = org.json.JSONTokener(raw).nextValue()
-                                                    v.toString()
+                                                    org.json.JSONTokener(raw).nextValue().toString()
                                                 }.getOrNull()
                                             )
                                         )
@@ -207,11 +208,26 @@ class JwImportActivity : ComponentActivity() {
                                 }
                             }
                         }
+                        val inventoryJson = evalJs(DOM_INVENTORY_JS)
+                        val storageJson = evalJs(STORAGE_JS)
+                        val linksJson = evalJs(LINKS_JS)
+                        // Cookie 全量值 — CookieManager 主线程约束(部分 ROM), 与 JS 段同在 Main 取
+                        val cookiesFull: String? = wv?.let { webView ->
+                            withContext(Dispatchers.Main) {
+                                runCatching {
+                                    android.webkit.CookieManager.getInstance()
+                                        .getCookie(webView.url)?.takeIf { it.isNotEmpty() }
+                                }.getOrNull()
+                            }
+                        }
                         val dumpResult = withContext(Dispatchers.IO) {
                             if (school == null) {
                                 JwCaptureDump.DumpResult.Fail("未选择学校")
                             } else {
-                                JwCaptureDump.exportDump(ctx, school, result, inventoryJson)
+                                JwCaptureDump.exportDump(
+                                    ctx, school, result, inventoryJson,
+                                    cookiesFull, storageJson, linksJson
+                                )
                             }
                         }
                         when (dumpResult) {

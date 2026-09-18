@@ -44,17 +44,31 @@ object JwCaptureDump {
     /**
      * 入口 — 由 JwErrorDialog "导出排查全量包" 按钮回调。
      * IO 阻塞, 必须在工作线程调用。
+     *
+     * 2026-09-18 用户: 排查包信息量对齐/超过桌面 collector (Windows/Mac/Linux) —
+     * cookies-full 全量值、storage 全键值、links 导航全集、env 设备环境、INDEX 清单
+     * 都是桌面版默认带、Android 端此前缺的。补齐方法签名加重载, 旧调用方零改动。
      */
     fun exportDump(
         ctx: Context,
         school: JwSchoolInfo,
         result: FrameCaptureResult,
         domInventoryJson: String?,
+    ): DumpResult = exportDump(ctx, school, result, domInventoryJson, null, null, null)
+
+    fun exportDump(
+        ctx: Context,
+        school: JwSchoolInfo,
+        result: FrameCaptureResult,
+        domInventoryJson: String?,
+        cookiesFull: String?,
+        storageJson: String?,
+        linksJson: String?,
     ): DumpResult {
         val stamp = JwDiagnosticSession.currentSessionId()
         val zipName = "$ZIP_BASE-$stamp.zip"
         return try {
-            val zipBytes = buildZip(ctx, school, result, domInventoryJson)
+            val zipBytes = buildZip(ctx, school, result, domInventoryJson, cookiesFull, storageJson, linksJson)
             val uri = writeZip(ctx, zipName, zipBytes)
             if (uri != null) {
                 DumpResult.Ok(zipName, uri)
@@ -73,19 +87,40 @@ object JwCaptureDump {
         school: JwSchoolInfo,
         result: FrameCaptureResult,
         domInventoryJson: String?,
+    ): ByteArray = buildZip(ctx, school, result, domInventoryJson, null, null, null)
+
+    fun buildZip(
+        ctx: Context?,
+        school: JwSchoolInfo,
+        result: FrameCaptureResult,
+        domInventoryJson: String?,
+        cookiesFull: String?,
+        storageJson: String?,
+        linksJson: String?,
     ): ByteArray {
+        val manifest = mutableListOf<Pair<String, String>>()  // (path, description)
         val out = java.io.ByteArrayOutputStream()
         ZipOutputStream(out).use { zos ->
-            writeSummary(zos, school, result)
-            writeFrames(zos, result)
-            writeInventory(zos, domInventoryJson)
-            writeText(zos, "netlog.txt", JwDiagnosticSession.exportNetlog())
-            writeText(zos, "console.txt", JwDiagnosticSession.exportConsole())
+            writeSummary(zos, manifest, school, result)
+            writeFrames(zos, manifest, result)
+            writeInventory(zos, manifest, domInventoryJson)
+            writeText(zos, manifest, "netlog.txt", JwDiagnosticSession.exportNetlog(), "全程网络请求(方法/状态/MIME/请求头/响应头/重定向)")
+            writeText(zos, manifest, "console.txt", JwDiagnosticSession.exportConsole(), "WebView console 输出")
+            writeText(zos, manifest, "cookies-full.txt", cookiesFull ?: "(no cookies captured)", "Cookie 全量值(1B 不脱敏, 排查登录态)")
+            writeText(zos, manifest, "5-storage/storage.json", storageJson ?: "{\"sessionStorage\":{},\"localStorage\":{}}", "Web Storage 全量键值(sessionStorage + localStorage)")
+            writeText(zos, manifest, "2-inline/links.json", linksJson ?: "{\"links\":[],\"selects\":[]}", "页面链接全集 + select 下拉枚举(学期码)")
+            writeEnvironment(zos, manifest, ctx)
+            writeIndex(zos, manifest)
         }
         return out.toByteArray()
     }
 
-    private fun writeSummary(zos: ZipOutputStream, school: JwSchoolInfo, r: FrameCaptureResult) {
+    private fun writeSummary(
+        zos: ZipOutputStream,
+        manifest: MutableList<Pair<String, String>>,
+        school: JwSchoolInfo,
+        r: FrameCaptureResult
+    ) {
         val sb = StringBuilder()
         sb.appendLine("# Sleepy JW Diagnostic Summary")
         sb.appendLine("session=${JwDiagnosticSession.currentSessionId()}")
@@ -100,25 +135,103 @@ object JwCaptureDump {
         sb.appendLine("blockedFrames=${r.blockedFrames.joinToString(";")}")
         sb.appendLine("skippedFrames=${r.skippedFrames.joinToString(",")}")
         sb.appendLine("diagnosticHint=${r.diagnosticHint}")
-        writeText(zos, "summary.txt", sb.toString())
+        writeText(zos, manifest, "summary.txt", sb.toString(), "状态/锚点/帧路径/重试/hint/学校/版本")
     }
 
-    private fun writeFrames(zos: ZipOutputStream, r: FrameCaptureResult) {
-        if (r.html.isNotBlank()) {
+    private fun writeFrames(
+        zos: ZipOutputStream,
+        manifest: MutableList<Pair<String, String>>,
+        r: FrameCaptureResult
+    ) {
+        // 全帧落盘 (对齐桌面 collector 1-dom/): 每个可达 frame 一个 html; 选中帧标 0- 前缀。
+        val seen = HashSet<String>()
+        var idx = 1
+        for ((framePath, html) in r.allFrames) {
+            if (html.isBlank()) continue
+            val safe = framePath.replace(Regex("[^A-Za-z0-9_-]"), "_").take(80)
+            if (!seen.add(safe)) continue
+            val isSel = r.selectedFramePath != null &&
+                framePath.endsWith(r.selectedFramePath.joinToString("_").replace(Regex("[^A-Za-z0-9_-]"), "_"))
+            val path = if (isSel) "frames/0-$safe.html" else "frames/$idx-$safe.html"
+            writeText(zos, manifest, path, html, if (isSel) "选中 frame 的 outerHTML 原文" else "可达 frame outerHTML 原文")
+            idx++
+        }
+        if (manifest.none { it.first.startsWith("frames/") } && r.html.isNotBlank()) {
             val path = "frames/0-${(r.selectedFramePath?.lastOrNull() ?: "selected").replace(Regex("[^A-Za-z0-9_-]"), "_")}.html"
-            writeText(zos, path, r.html)
+            writeText(zos, manifest, path, r.html, "选中 frame 的 outerHTML 原文(无全帧快照兜底)")
         }
     }
 
-    private fun writeInventory(zos: ZipOutputStream, json: String?) {
+    private fun writeInventory(
+        zos: ZipOutputStream,
+        manifest: MutableList<Pair<String, String>>,
+        json: String?
+    ) {
         val body = json?.takeIf { it.isNotBlank() } ?: "{\"url\":\"(no document)\",\"total\":0,\"items\":[]}"
-        writeText(zos, "dom-inventory.txt", body)
+        writeText(zos, manifest, "dom-inventory.txt", body, "DOM 可点元素清单(a/button/input/select/textarea/label)")
     }
 
-    private fun writeText(zos: ZipOutputStream, name: String, content: String) {
+    /** 设备/WebView 环境 — 适配者一眼看到 SDK/包名/UA/WebView 实现。 */
+    private fun writeEnvironment(
+        zos: ZipOutputStream,
+        manifest: MutableList<Pair<String, String>>,
+        ctx: Context?
+    ) {
+        val sb = StringBuilder()
+        sb.appendLine("# Device / WebView Environment")
+        sb.appendLine("sdk=${Build.VERSION.SDK_INT} release=${Build.VERSION.RELEASE} device=${Build.DEVICE} model=${Build.MODEL} manufacturer=${Build.MANUFACTURER}")
+        sb.appendLine("appPackage=${ctx?.packageName ?: "(no ctx)"}")
+        // WebView 版本 — chromium 内核版本号, 排协议时常用 (94/100/110 ...)
+        runCatching {
+            val pi = android.webkit.WebView.getCurrentWebViewPackage()
+            sb.appendLine("webviewPackage=${pi?.packageName ?: "(none)"} webviewVersion=${pi?.versionName ?: "(none)"}")
+        }.onFailure { sb.appendLine("webviewPackage=<get failed: ${it.message}>") }
+        writeText(zos, manifest, "env/device.txt", sb.toString(), "设备/Android SDK/WebView 实现版本")
+    }
+
+    /** INDEX.txt — 桌面 collector 7 段目录说明 + 文件清单(对标)。 */
+    private fun writeIndex(
+        zos: ZipOutputStream,
+        manifest: List<Pair<String, String>>
+    ) {
+        val sb = StringBuilder()
+        sb.appendLine("Sleepy JW Diagnostic Package (sleepy-android)")
+        sb.appendLine("session=${JwDiagnosticSession.currentSessionId()}")
+        sb.appendLine()
+        sb.appendLine("== 目录说明 ==")
+        sb.appendLine("summary.txt  状态/锚点/帧路径/重试/hint/学校/版本")
+        sb.appendLine("frames/      所有可达 frame 的 outerHTML 原文")
+        sb.appendLine("dom-inventory.txt  DOM 可点元素清单(失败时反循救命)")
+        sb.appendLine("netlog.txt   全程网络请求 + 请求头/响应头/重定向标记")
+        sb.appendLine("console.txt  WebView console 输出")
+        sb.appendLine("cookies-full.txt  Cookie 全量值(1B 不脱敏,排查登录态)")
+        sb.appendLine("5-storage/  Web Storage(sessionStorage + localStorage)全键值")
+        sb.appendLine("2-inline/links.json  页面链接全集 + select 下拉枚举(学期码)")
+        sb.appendLine("env/device.txt  SDK/包名/WebView 实现版本")
+        sb.appendLine()
+        sb.appendLine("== 文件清单 (path | 说明) ==")
+        for ((path, desc) in manifest) {
+            sb.appendLine("$path  |  $desc")
+        }
+        sb.appendLine()
+        sb.appendLine("== 自查提示 ==")
+        sb.appendLine("接口响应/页面可能含你的姓名/学号;提交前搜索改成 XXX 即可,不影响适配。")
+        zos.putNextEntry(ZipEntry("INDEX.txt"))
+        zos.write(sb.toString().toByteArray(Charsets.UTF_8))
+        zos.closeEntry()
+    }
+
+    private fun writeText(
+        zos: ZipOutputStream,
+        manifest: MutableList<Pair<String, String>>,
+        name: String,
+        content: String,
+        description: String
+    ) {
         zos.putNextEntry(ZipEntry(name))
         zos.write(content.toByteArray(Charsets.UTF_8))
         zos.closeEntry()
+        manifest += name to description
     }
 
     /** API 29+: MediaStore.Downloads RELATIVE_PATH = "Download/Sleepy/教务日志" */

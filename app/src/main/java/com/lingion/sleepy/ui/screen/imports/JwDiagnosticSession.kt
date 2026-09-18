@@ -33,6 +33,12 @@ object JwDiagnosticSession {
         val url: String,
         val status: Int,
         val mime: String?,
+        // 2026-09-18 用户: 排查包必须与桌面 collector 同级 — 请求头/响应头是排协议
+        // 的半张图 (XRW/token/Set-Cookie 类自定义头只在头里可见)。
+        val requestHeaders: String? = null,
+        val responseHeaders: String? = null,
+        val isRedirect: Boolean = false,
+        val isMainFrame: Boolean = false,
     )
 
     private data class ConsoleLog(
@@ -63,9 +69,19 @@ object JwDiagnosticSession {
             url = request.url?.toString() ?: "",
             status = response?.let { inferStatus(it) } ?: 0,
             mime = response?.mimeType,
+            requestHeaders = headersText(request.requestHeaders),
+            responseHeaders = response?.let { headersText(it.responseHeaders) },
+            isRedirect = request.isRedirect,
+            isMainFrame = request.isForMainFrame,
         )
         requests.addFirst(log)
         while (requests.size > RING_LIMIT) requests.pollLast()
+    }
+
+    /** headers Map → "Name: Value" 逐行文本; 1B 不脱敏, 原样保留。 */
+    private fun headersText(h: Map<String, String>?): String? {
+        if (h.isNullOrEmpty()) return null
+        return h.entries.joinToString("\n") { "${it.key}: ${it.value}" }
     }
 
     /** status 是 WebView 不直接暴露的——只能从 response.statusCode 或推断。优先 statusCode。 */
@@ -94,10 +110,20 @@ object JwDiagnosticSession {
     fun exportNetlog(): String = buildString {
         appendLine("# Session: $sessionId")
         appendLine("# Total: ${requests.size} requests")
-        appendLine("# Format: +offsetMs METHOD status mime url")
+        appendLine("# Format: +offsetMs METHOD status mime [MAIN|sub] [REDIRECT] url")
         appendLine()
         requests.toList().asReversed().forEach { r ->
-            appendLine("+${r.ts}ms ${r.method} ${r.status} ${r.mime ?: "-"} ${r.url}")
+            val flags = buildString {
+                if (r.isMainFrame) append(" MAIN")
+                if (r.isRedirect) append(" REDIRECT")
+            }
+            appendLine("+${r.ts}ms ${r.method} ${r.status} ${r.mime ?: "-"}$flags ${r.url}")
+            r.requestHeaders?.let { h ->
+                appendLine("  > ${h.replace("\n", "\n  > ")}")
+            }
+            r.responseHeaders?.let { h ->
+                appendLine("  < ${h.replace("\n", "\n  < ")}")
+            }
         }
     }
 
