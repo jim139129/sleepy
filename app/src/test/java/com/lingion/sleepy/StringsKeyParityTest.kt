@@ -130,6 +130,31 @@ class StringsKeyParityTest {
         "notif_tomorrow_title_no_course"
     )
 
+    private val reminderPreviewKeys = listOf(
+        "reminder_preview_today_date",
+        "reminder_preview_tomorrow_date",
+        "reminder_preview_date",
+        "reminder_preview_teacher",
+        "reminder_daily_preview_dynamic",
+        "reminder_daily_preview_dynamic_no_course",
+        "reminder_before_class_preview_dynamic",
+        "reminder_before_class_preview_dynamic_no_course"
+    )
+
+    /**
+     * 编辑课程的时段卡头摘要 (2026-09-18)。
+     * 摘要分成「日历范围」与「上课详情」两行，所有显示片段都必须可本地化。
+     */
+    private val editCourseSlotSummaryKeys = listOf(
+        "slot_summary_week_single",
+        "slot_summary_week_range",
+        "slot_summary_period_single",
+        "slot_summary_period_range",
+        "slot_summary_time_range",
+        "slot_summary_teacher",
+        "slot_summary_room"
+    )
+
     /**
      * 已删除的键 (PR48 落地调整 2026-09-17): 每日提醒区改单卡母子布局,
      * 独立「提醒开关」卡取消, 总开关并入卡头。反向锁: 任何 locale 复活
@@ -170,6 +195,33 @@ class StringsKeyParityTest {
             for (key in tomorrowReminderKeys) {
                 assertTrue("$locale missing $key", text.contains("name=\"$key\""))
             }
+        }
+    }
+
+    @Test
+    fun reminder_preview_keys_present_in_all_six_locales() {
+        for (locale in localeDirs) {
+            val text = File(basePath, "$locale/strings.xml").readText()
+            for (key in reminderPreviewKeys) {
+                assertTrue("$locale missing $key", text.contains("name=\"$key\""))
+            }
+        }
+    }
+
+    @Test
+    fun edit_course_slot_summary_keys_present_in_all_six_locales() {
+        for (locale in localeDirs) {
+            val text = File(basePath, "$locale/strings.xml").readText()
+            for (key in editCourseSlotSummaryKeys) {
+                assertTrue(
+                    "edit-course slot summary key \"$key\" missing in $locale/strings.xml",
+                    text.contains("name=\"$key\"")
+                )
+            }
+            assertTrue(
+                "obsolete selected_days key resurrected in $locale/strings.xml",
+                !text.contains("name=\"selected_days\"")
+            )
         }
     }
 

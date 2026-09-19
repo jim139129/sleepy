@@ -232,6 +232,13 @@
     <string name="meeting_slots">時限</string>
     <string name="meeting_slots_sub">任意の数の時限を追加できます。各時限で複数の曜日を選択可能</string>
     <string name="slot_n">時限 %1$d</string>
+    <string name="slot_summary_week_single">第%1$d週</string>
+    <string name="slot_summary_week_range">第%1$d～%2$d週</string>
+    <string name="slot_summary_period_single">%1$d限</string>
+    <string name="slot_summary_period_range">%1$d～%2$d限（全%3$d限）</string>
+    <string name="slot_summary_time_range">%1$s～%2$s</string>
+    <string name="slot_summary_teacher">担当：%1$s</string>
+    <string name="slot_summary_room">教室：%1$s</string>
     <string name="slot_week_range">週範囲</string>
     <string name="slot_week_order">コマ %1$d の開始週は終了週より後にはできません</string>
     <string name="apply_to_all_slots">すべてのコマに適用</string>
@@ -266,7 +273,6 @@
     <string name="fix_issues_first">最初にこれらの問題を修正してください</string>
     <string name="more_unexpanded">他に %1$d 件あります</string>
     <string name="create_course_btn">作成</string>
-    <string name="selected_days">選択中：%1$s</string>
     <string name="time_format_hint">形式 HH:mm</string>
 
     <string name="mine_title">マイ</string>
@@ -618,11 +624,19 @@
     <string name="reminder_banner_sub">通知バーに授業前のバナーを表示</string>
     <string name="reminder_banner_title">バナーリマインダー</string>
     <string name="reminder_before_class_preview">例：次の授業 高等数学 08:00 @ 教学棟A101</string>
+    <string name="reminder_before_class_preview_dynamic">例：%1$s、次の授業は「%2$s」、%3$s、教室%4$s%5$s</string>
+    <string name="reminder_before_class_preview_dynamic_no_course">例：通知対象の授業はありません。</string>
     <string name="reminder_before_class_sub">各授業の開始前に次の授業情報をリマインド</string>
     <string name="reminder_before_class_title">授業前リマインダー</string>
     <string name="reminder_before_minutes_label">事前</string>
     <string name="reminder_before_minutes_unit">分</string>
     <string name="reminder_daily_preview">例：今日 15 日、授業は 3 コマ。最初の授業 高等数学 08:00 @ 教学棟A101</string>
+    <string name="reminder_preview_today_date">今日 %1$s（%2$s）</string>
+    <string name="reminder_preview_tomorrow_date">明日 %1$s（%2$s）</string>
+    <string name="reminder_preview_date">%1$s（%2$s）</string>
+    <string name="reminder_preview_teacher">、担当：%1$s</string>
+    <string name="reminder_daily_preview_dynamic">例：%1$s、授業は%2$dコマ。最初の授業は「%3$s」、%4$s、教室%5$s%6$s</string>
+    <string name="reminder_daily_preview_dynamic_no_course">例：%1$s、授業はありません。</string>
     <string name="reminder_daily_sub">毎日のサマリーと翌日のプレビューを設定</string>
     <string name="reminder_daily_time_label">今日のサマリー時刻</string>
     <string name="reminder_daily_title">毎日リマインダー</string>

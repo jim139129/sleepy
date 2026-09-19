@@ -232,6 +232,13 @@
     <string name="meeting_slots">上課時段</string>
     <string name="meeting_slots_sub">一個課程可有任意多個時段；每個時段都可多選星期，並可按節次或按時間錄入</string>
     <string name="slot_n">時段 %1$d</string>
+    <string name="slot_summary_week_single">第 %1$d 週</string>
+    <string name="slot_summary_week_range">第 %1$d–%2$d 週</string>
+    <string name="slot_summary_period_single">第 %1$d 節</string>
+    <string name="slot_summary_period_range">第 %1$d–%2$d 節（共 %3$d 節）</string>
+    <string name="slot_summary_time_range">%1$s–%2$s</string>
+    <string name="slot_summary_teacher">老師：%1$s</string>
+    <string name="slot_summary_room">地點：%1$s</string>
     <string name="slot_week_range">週次</string>
     <string name="slot_week_order">時段 %1$d 的起始週不能晚於結束週</string>
     <string name="apply_to_all_slots">套用到所有時段</string>
@@ -266,7 +273,6 @@
     <string name="fix_issues_first">請先修正這些問題</string>
     <string name="more_unexpanded">還有 %1$d 條未展開</string>
     <string name="create_course_btn">建立課程</string>
-    <string name="selected_days">已選：%1$s</string>
     <string name="time_format_hint">格式 HH:mm</string>
 
     <string name="mine_title">我的</string>
@@ -618,11 +624,19 @@
     <string name="reminder_banner_sub">在系統通知欄顯示課前橫幅</string>
     <string name="reminder_banner_title">橫幅提醒</string>
     <string name="reminder_before_class_preview">範例：下節課 高等數學 於 08:00 在 教學樓A101 上課</string>
+    <string name="reminder_before_class_preview_dynamic">範例：%1$s，下節課是「%2$s」，於 %3$s 在 %4$s 上課%5$s</string>
+    <string name="reminder_before_class_preview_dynamic_no_course">範例：未來沒有可提醒的課程。</string>
     <string name="reminder_before_class_sub">在每節課開始前提醒下節課資訊</string>
     <string name="reminder_before_class_title">每節課前提醒</string>
     <string name="reminder_before_minutes_label">提前</string>
     <string name="reminder_before_minutes_unit">分鐘</string>
     <string name="reminder_daily_preview">範例：今日 15 號 您有 3 節課 第一節課 高等數學 於 08:00 在 教學樓A101 上課</string>
+    <string name="reminder_preview_today_date">今日 %1$s（%2$s）</string>
+    <string name="reminder_preview_tomorrow_date">明日 %1$s（%2$s）</string>
+    <string name="reminder_preview_date">%1$s（%2$s）</string>
+    <string name="reminder_preview_teacher">，老師：%1$s</string>
+    <string name="reminder_daily_preview_dynamic">範例：%1$s，您有 %2$d 節課。第一節課是「%3$s」，於 %4$s 在 %5$s 上課%6$s</string>
+    <string name="reminder_daily_preview_dynamic_no_course">範例：%1$s，暫無課程。</string>
     <string name="reminder_daily_sub">每天定時推送今日摘要與明日預告</string>
     <string name="reminder_daily_time_label">今日摘要時間</string>
     <string name="reminder_daily_title">每日提醒</string>

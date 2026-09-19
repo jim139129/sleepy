@@ -264,6 +264,13 @@
     <string name="meeting_slots">上课时段</string>
     <string name="meeting_slots_sub">一个课程可有任意多个时段；每个时段都可多选星期，并可按节次或按时间录入</string>
     <string name="slot_n">时段 %1$d</string>
+    <string name="slot_summary_week_single">第 %1$d 周</string>
+    <string name="slot_summary_week_range">第 %1$d–%2$d 周</string>
+    <string name="slot_summary_period_single">第 %1$d 节</string>
+    <string name="slot_summary_period_range">第 %1$d–%2$d 节（共 %3$d 节）</string>
+    <string name="slot_summary_time_range">%1$s–%2$s</string>
+    <string name="slot_summary_teacher">老师：%1$s</string>
+    <string name="slot_summary_room">地点：%1$s</string>
     <string name="slot_week_range">周次</string>
     <string name="slot_week_order">时段 %1$d 的起始周不能晚于结束周</string>
     <string name="apply_to_all_slots">应用到所有时段</string>
@@ -298,7 +305,6 @@
     <string name="fix_issues_first">请先修正这些问题</string>
     <string name="more_unexpanded">还有 %1$d 条未展开</string>
     <string name="create_course_btn">创建课程</string>
-    <string name="selected_days">已选：%1$s</string>
     <string name="time_format_hint">格式 HH:mm</string>
 
     <!-- Mine -->
@@ -605,6 +611,12 @@
     <string name="reminder_daily_sub">每天定时推送今日摘要与明日预告</string>
     <string name="reminder_daily_time_label">今日摘要时间</string>
     <string name="reminder_daily_preview">示例：今日 15 号 您有 3 节课 第一节课 高等数学 于 08:00 在 教学楼A101 上课</string>
+    <string name="reminder_preview_today_date">今日 %1$s（%2$s）</string>
+    <string name="reminder_preview_tomorrow_date">明日 %1$s（%2$s）</string>
+    <string name="reminder_preview_date">%1$s（%2$s）</string>
+    <string name="reminder_preview_teacher">，老师：%1$s</string>
+    <string name="reminder_daily_preview_dynamic">示例：%1$s，您有 %2$d 节课。第一节课是「%3$s」，于 %4$s 在 %5$s 上课%6$s</string>
+    <string name="reminder_daily_preview_dynamic_no_course">示例：%1$s，暂无课程。</string>
     <string name="reminder_tomorrow_time_label">明日预告时间</string>
     <string name="reminder_tomorrow_preview">示例：明日 16 号 您有 3 节课 第一节课 高等数学 于 08:00 在 教学楼A101 上课</string>
     <string name="reminder_daily_today_toggle_title">今日摘要</string>
@@ -616,6 +628,8 @@
     <string name="reminder_before_minutes_label">提前</string>
     <string name="reminder_before_minutes_unit">分钟</string>
     <string name="reminder_before_class_preview">示例：下节课 高等数学 于 08:00 在 教学楼A101 上课</string>
+    <string name="reminder_before_class_preview_dynamic">示例：%1$s，下节课是「%2$s」，于 %3$s 在 %4$s 上课%5$s</string>
+    <string name="reminder_before_class_preview_dynamic_no_course">示例：未来没有可提醒的课程。</string>
     <string name="reminder_banner_title">横幅提醒</string>
     <string name="reminder_banner_sub">在系统通知栏显示课前横幅</string>
     <string name="reminder_fluid_title">流体云 / 超级岛</string>

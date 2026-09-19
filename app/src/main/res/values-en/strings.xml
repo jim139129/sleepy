@@ -249,6 +249,13 @@
     <string name="meeting_slots">Time Slots</string>
     <string name="meeting_slots_sub">A course can have any number of time slots; each can select multiple days</string>
     <string name="slot_n">Slot %1$d</string>
+    <string name="slot_summary_week_single">Week %1$d</string>
+    <string name="slot_summary_week_range">Weeks %1$d–%2$d</string>
+    <string name="slot_summary_period_single">Period %1$d</string>
+    <string name="slot_summary_period_range">Periods %1$d–%2$d (%3$d total)</string>
+    <string name="slot_summary_time_range">%1$s–%2$s</string>
+    <string name="slot_summary_teacher">Teacher: %1$s</string>
+    <string name="slot_summary_room">Room: %1$s</string>
     <string name="slot_week_range">Weeks</string>
     <string name="slot_week_order">Slot %1$d start week cannot be after its end week</string>
     <string name="apply_to_all_slots">Apply to all slots</string>
@@ -283,7 +290,6 @@
     <string name="fix_issues_first">Please fix these issues first</string>
     <string name="more_unexpanded">%1$d more unexpanded</string>
     <string name="create_course_btn">Create</string>
-    <string name="selected_days">Selected: %1$s</string>
     <string name="time_format_hint">Format HH:mm</string>
 
     <string name="mine_title">Me</string>
@@ -633,11 +639,19 @@ Per-school attribution (one card per school, expand to see details) — Hefei Un
     <string name="reminder_banner_sub">Show a before-class banner in the notification bar</string>
     <string name="reminder_banner_title">Banner Reminder</string>
     <string name="reminder_before_class_preview">Example: Next class Advanced Math at 08:00 in Building A101</string>
+    <string name="reminder_before_class_preview_dynamic">Example: %1$s — next class: %2$s at %3$s in %4$s%5$s</string>
+    <string name="reminder_before_class_preview_dynamic_no_course">Example: No upcoming classes to remind you about.</string>
     <string name="reminder_before_class_sub">Remind you about the next class before each one starts</string>
     <string name="reminder_before_class_title">Before-class Reminder</string>
     <string name="reminder_before_minutes_label">Advance</string>
     <string name="reminder_before_minutes_unit">minutes</string>
     <string name="reminder_daily_preview">Example: Today the 15th, 3 classes. First class 08:00 Advanced Math @ Bldg A101</string>
+    <string name="reminder_preview_today_date">Today, %1$s (%2$s)</string>
+    <string name="reminder_preview_tomorrow_date">Tomorrow, %1$s (%2$s)</string>
+    <string name="reminder_preview_date">%1$s (%2$s)</string>
+    <string name="reminder_preview_teacher">, Teacher: %1$s</string>
+    <string name="reminder_daily_preview_dynamic">Example: %1$s — %2$d classes. First class: %3$s at %4$s in %5$s%6$s</string>
+    <string name="reminder_daily_preview_dynamic_no_course">Example: %1$s — no classes.</string>
     <string name="reminder_daily_sub">Set daily course summaries: today\'s and tomorrow-evening preview</string>
     <string name="reminder_daily_time_label">Today summary time</string>
     <string name="reminder_daily_title">Daily Reminder</string>

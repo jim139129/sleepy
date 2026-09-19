@@ -232,6 +232,13 @@
     <string name="meeting_slots">Horarios</string>
     <string name="meeting_slots_sub">Un curso puede tener cualquier número de horarios; cada uno puede seleccionar varios días</string>
     <string name="slot_n">Horario %1$d</string>
+    <string name="slot_summary_week_single">Semana %1$d</string>
+    <string name="slot_summary_week_range">Semanas %1$d–%2$d</string>
+    <string name="slot_summary_period_single">Periodo %1$d</string>
+    <string name="slot_summary_period_range">Periodos %1$d–%2$d (%3$d en total)</string>
+    <string name="slot_summary_time_range">%1$s–%2$s</string>
+    <string name="slot_summary_teacher">Profesor: %1$s</string>
+    <string name="slot_summary_room">Aula: %1$s</string>
     <string name="slot_week_range">Semanas</string>
     <string name="slot_week_order">La semana de inicio de la franja %1$d no puede ser posterior a la de fin</string>
     <string name="apply_to_all_slots">Aplicar a todas las franjas</string>
@@ -266,7 +273,6 @@
     <string name="fix_issues_first">Por favor corrija estos problemas primero</string>
     <string name="more_unexpanded">%1$d más sin expandir</string>
     <string name="create_course_btn">Crear curso</string>
-    <string name="selected_days">Seleccionado: %1$s</string>
     <string name="time_format_hint">Formato HH:mm</string>
 
     <string name="mine_title">Ajustes</string>
@@ -618,11 +624,19 @@ Agradecimientos por universidad (una tarjeta por universidad, expandir para ver 
     <string name="reminder_banner_sub">Mostrar un banner antes de clase en la barra de notificaciones</string>
     <string name="reminder_banner_title">Recordatorio en banner</string>
     <string name="reminder_before_class_preview">Ejemplo: Próxima clase Cálculo Avanzado a las 08:00 en Edificio A101</string>
+    <string name="reminder_before_class_preview_dynamic">Ejemplo: %1$s: próxima clase %2$s a las %3$s en %4$s%5$s</string>
+    <string name="reminder_before_class_preview_dynamic_no_course">Ejemplo: No hay próximas clases que recordar.</string>
     <string name="reminder_before_class_sub">Recordarte sobre la próxima clase antes de que comience cada una</string>
     <string name="reminder_before_class_title">Recordatorio antes de clase</string>
     <string name="reminder_before_minutes_label">Adelantar</string>
     <string name="reminder_before_minutes_unit">minutos</string>
     <string name="reminder_daily_preview">Ejemplo: Hoy 15, tienes 3 clases. Primera clase Cálculo Avanzado a las 08:00 en Edificio A101</string>
+    <string name="reminder_preview_today_date">Hoy %1$s (%2$s)</string>
+    <string name="reminder_preview_tomorrow_date">Mañana %1$s (%2$s)</string>
+    <string name="reminder_preview_date">%1$s (%2$s)</string>
+    <string name="reminder_preview_teacher">, Profesor: %1$s</string>
+    <string name="reminder_daily_preview_dynamic">Ejemplo: %1$s: tienes %2$d clases. Primera clase: %3$s a las %4$s en %5$s%6$s</string>
+    <string name="reminder_daily_preview_dynamic_no_course">Ejemplo: %1$s: no hay clases.</string>
     <string name="reminder_daily_sub">Configura resúmenes diarios: resumen de hoy y vista previa de mañana</string>
     <string name="reminder_daily_time_label">Hora del resumen de hoy</string>
     <string name="reminder_daily_title">Recordatorio diario</string>
