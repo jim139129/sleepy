@@ -15,6 +15,8 @@ class WidgetDeviceVerificationScriptTest {
         assertTrue(script.canExecute())
         val source = script.readText()
         assertTrue(source.contains("dumpsys package"))
+        assertTrue(source.contains("sort -u"))
+        assertTrue(source.contains("provider_count=\"$" + "("))
         assertTrue(source.contains("android.appwidget.action.APPWIDGET_UPDATE"))
         assertTrue(source.contains("miui.appwidget.action.APPWIDGET_UPDATE"))
         assertTrue(!source.contains("pm clear"))

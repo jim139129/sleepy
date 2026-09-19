@@ -14,12 +14,18 @@ if ! "${ADB[@]}" get-state >/dev/null 2>&1; then
 fi
 
 printf 'device=%s\n' "$(${ADB[@]} get-serialno)"
+printf 'manufacturer=%s\n' "$(${ADB[@]} shell getprop ro.product.manufacturer | tr -d '\r')"
+printf 'model=%s\n' "$(${ADB[@]} shell getprop ro.product.model | tr -d '\r')"
+printf 'api=%s\n' "$(${ADB[@]} shell getprop ro.build.version.sdk | tr -d '\r')"
+printf 'fingerprint=%s\n' "$(${ADB[@]} shell getprop ro.build.fingerprint | tr -d '\r')"
 printf 'package=%s\n' "$PACKAGE"
 "${ADB[@]}" shell pm path "$PACKAGE" >/dev/null
 
-provider_count="$(${ADB[@]} shell dumpsys package "$PACKAGE" | grep -Ec 'com\.lingion\.sleepy/\.widget\.(Today|TwoDay|WeekList|WeekView|WeekGrid)' || true)"
-if [[ "$provider_count" -lt 13 ]]; then
-  printf 'Expected at least 13 widget provider registrations, found %s.\n' "$provider_count" >&2
+provider_count="$(${ADB[@]} shell dumpsys package "$PACKAGE" \
+  | grep -oE 'com\.lingion\.sleepy/\.widget\.(Today|TwoDay|WeekList|WeekView|WeekGrid)[A-Za-z]+(Receiver|Provider)' \
+  | sort -u | wc -l | tr -d ' ')"
+if [[ "$provider_count" -ne 13 ]]; then
+  printf 'Expected exactly 13 unique widget providers, found %s.\n' "$provider_count" >&2
   exit 1
 fi
 

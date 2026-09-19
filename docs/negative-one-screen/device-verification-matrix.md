@@ -15,7 +15,7 @@
 
 | 厂商/生态 | APK 路径 | 状态 | 证据 |
 |---|---|---|---|
-| Google Pixel / AOSP | 标准 AppWidget | `verified` | Android Emulator `emulator-5554`; `verify_widget_device.sh` PASS; 13 provider 注册 |
+| Google Pixel / AOSP | 标准 AppWidget | `verified` | Android Emulator `emulator-5554`; Android 13 API 33; fingerprint `Android/sdk_phone64_x86_64/emulator64_x86_64:13/TE1A.220922.034/10940250:userdebug/test-keys`; `verify_widget_device.sh` PASS; 13 个唯一 provider 注册 |
 | OPPO / ColorOS | 标准 AppWidget；Pantanal 另需授权 | `static-verified` | 标准契约 + 已有 OPPO 实机渲染证据；本轮未连接 OPPO 设备 |
 | Samsung / One UI | 标准 AppWidget | `pending-device` | 公共 Android 契约；缺 Samsung 设备证据 |
 | Xiaomi / HyperOS | AppWidget + 已声明 AppVault 扩展 | `pending-device` | Manifest/JVM 契约；缺 Xiaomi 设备证据 |
@@ -34,10 +34,17 @@
 | Meizu / Flyme | 标准 AppWidget；Aicy 私有协议未公开 | `pending-device` | 公共 Android 契约；缺 Meizu 设备证据 |
 | Snapdragon Spaces | 独立 XR 平台 | `platform-bound` | Android APK 不替代该生态 |
 
+## 本机测试资产盘点（2026-09-19）
+
+- 已安装 AVD：`sleepy_test`，Google Pixel 5 profile，Android 13 API 33，`default/x86_64`。
+- 当前连接设备：`emulator-5554`，系统 fingerprint 记录在上表。
+- 本机没有 Samsung、Xiaomi、vivo、HONOR、Huawei、Sony、Motorola 等 OEM system image，也没有对应真机连接。
+- 因此这些条目必须保持 `pending-device`；新增设备后，不能直接改表，必须先运行 smoke 并保存输出。
+
 ## 可重复命令
 
 ```sh
 ANDROID_SERIAL=<serial> tools/verify_widget_device.sh
 ```
 
-脚本只读取包路径和已注册组件/广播，不卸载、不清数据、不写数据库。它验证的是 APK 侧接线，不宣称厂商私有负一屏已经获得商务准入。
+脚本只读取包路径、设备属性和已注册组件/广播，不卸载、不清数据、不写数据库。它验证的是 APK 侧接线，不宣称厂商私有负一屏已经获得商务准入。
