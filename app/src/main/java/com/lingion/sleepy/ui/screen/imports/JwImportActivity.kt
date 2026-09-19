@@ -24,7 +24,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -70,6 +71,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.rememberCoroutineScope
 import com.lingion.sleepy.R
 import kotlinx.serialization.encodeToString
@@ -129,6 +131,7 @@ class JwImportActivity : ComponentActivity() {
                 var stage by remember { mutableStateOf<Stage>(Stage.SelectSchool) }
                 var errorMsg by remember { mutableStateOf<String?>(null) }
                 var statusMsg by remember { mutableStateOf<String?>(null) }
+                val statusSnackbarHostState = remember { SnackbarHostState() }
                 // 排查全量包导出: 错误弹窗点"导出排查全量包"按钮后由 JwCaptureDump 落 zip
                 var lastCaptureResult by remember { mutableStateOf<FrameCaptureResult?>(null) }
                 var webViewForDump by remember { mutableStateOf<WebView?>(null) }
@@ -211,6 +214,61 @@ class JwImportActivity : ComponentActivity() {
                         val inventoryJson = evalJs(DOM_INVENTORY_JS)
                         val storageJson = evalJs(STORAGE_JS)
                         val linksJson = evalJs(LINKS_JS)
+                        // 页面运行时真实 fetch/XHR 记录，和资源重取分开保存。
+                        val networkLiveSnapshot = wv?.let { webView ->
+                            withContext(Dispatchers.Main) {
+                                suspendCancellableCoroutine { cont ->
+                                    webView.evaluateJavascript(DIAGNOSTIC_NETWORK_SNAPSHOT_JS) { raw ->
+                                        if (cont.isActive) cont.resumeWith(Result.success(raw))
+                                    }
+                                }
+                            }
+                        }
+                        val networkReplayJson = wv?.let { webView ->
+                            withContext(Dispatchers.Main) {
+                                withTimeoutOrNull(30_000L) {
+                                    suspendCancellableCoroutine { cont ->
+                                        val bridge = DiagnosticReplayBridge { json ->
+                                            webView.removeJavascriptInterface("__sleepyDiagBridge")
+                                            if (cont.isActive) cont.resumeWith(Result.success(json))
+                                        }
+                                        webView.addJavascriptInterface(bridge, "__sleepyDiagBridge")
+                                        webView.evaluateJavascript(DIAGNOSTIC_NETWORK_EXPORT_JS, null)
+                                        // invokeOnCancellation 在任意线程触发 — WebView API 必须 main.post
+                                        cont.invokeOnCancellation {
+                                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                                runCatching { webView.removeJavascriptInterface("__sleepyDiagBridge") }
+                                            }
+                                        }
+                                    }
+                                }.also { webView.removeJavascriptInterface("__sleepyDiagBridge") }
+                            }
+                        }
+                        // evaluateJavascript 不等待 Promise; 资源重取通过一次性 JS bridge 回传。
+                        val resourceReplayJson = wv?.let { webView ->
+                            withContext(Dispatchers.Main) {
+                                withTimeoutOrNull(16_000L) {
+                                    suspendCancellableCoroutine { cont ->
+                                        val bridge = DiagnosticReplayBridge { json ->
+                                            webView.removeJavascriptInterface("__sleepyDiagBridge")
+                                            if (cont.isActive) cont.resumeWith(Result.success(json))
+                                        }
+                                        webView.addJavascriptInterface(bridge, "__sleepyDiagBridge")
+                                        webView.evaluateJavascript(RESOURCE_REPLAY_JS, null)
+                                        // invokeOnCancellation 在任意线程触发 — WebView API 必须 main.post
+                                        cont.invokeOnCancellation {
+                                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                                runCatching { webView.removeJavascriptInterface("__sleepyDiagBridge") }
+                                            }
+                                        }
+                                    }
+                                }.also {
+                                    // JS has its own 15s deadline; this also covers pages where the
+                                    // injected interface is unavailable and no callback can arrive.
+                                    webView.removeJavascriptInterface("__sleepyDiagBridge")
+                                }
+                            }
+                        }
                         // Cookie 全量值 — CookieManager 主线程约束(部分 ROM), 与 JS 段同在 Main 取
                         val cookiesFull: String? = wv?.let { webView ->
                             withContext(Dispatchers.Main) {
@@ -226,7 +284,8 @@ class JwImportActivity : ComponentActivity() {
                             } else {
                                 JwCaptureDump.exportDump(
                                     ctx, school, result, inventoryJson,
-                                    cookiesFull, storageJson, linksJson
+                                    cookiesFull, storageJson, linksJson, resourceReplayJson,
+                                    networkReplayJson ?: networkLiveSnapshot
                                 )
                             }
                         }
@@ -632,17 +691,21 @@ class JwImportActivity : ComponentActivity() {
                         dismissButton = {}
                     )
                 }
-                statusMsg?.let { msg ->
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.BottomCenter
-                    ) {
-                        Snackbar(
-                            modifier = Modifier.padding(16.dp)
-                        ) {
-                            Text(msg)
-                        }
-                    }
+                LaunchedEffect(statusMsg) {
+                    val msg = statusMsg ?: return@LaunchedEffect
+                    statusSnackbarHostState.currentSnackbarData?.dismiss()
+                    statusSnackbarHostState.showSnackbar(msg)
+                    // Snackbar 自带短时生命周期；结束后清空状态，避免提示永久占据底部。
+                    statusMsg = null
+                }
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    SnackbarHost(
+                        hostState = statusSnackbarHostState,
+                        modifier = Modifier.padding(16.dp)
+                    )
                 }
             }
         }

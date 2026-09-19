@@ -133,6 +133,124 @@ class JwCaptureDumpContentTest {
     }
 
     @Test
+    fun buildZip_writes_replayed_network_resource_bodies() {
+        val replay = """[{"url":"https://yjspy.xju.edu.cn/static/app.js","status":200,"mime":"application/javascript","body":"window.__xju=\"full\""}]"""
+        val bytes = JwCaptureDump.buildZip(
+            ctx = null,
+            school = stubSchool(),
+            result = stubResult(),
+            domInventoryJson = null,
+            cookiesFull = null,
+            storageJson = null,
+            linksJson = null,
+            resourceReplayJson = replay,
+        )
+        val names = zipNames(bytes)
+        assertTrue("replayed network resources must be exported", names.any { it.startsWith("4-net-replay/") && it.endsWith(".body") })
+        val body = readEntry(bytes, "4-net-replay/1.body")
+        assertTrue("response body must remain unredacted", body.contains("window.__xju"))
+    }
+
+    @Test
+    fun buildZip_records_failed_network_resource_capture_without_fabricating_body() {
+        val replay = """[{"url":"https://cdn.example.test/app.wasm","status":0,"mime":"application/wasm","error":"cross-origin"}]"""
+        val bytes = JwCaptureDump.buildZip(null, stubSchool(), stubResult(), null, null, null, null, replay)
+        assertTrue("capture failure metadata must be retained", readEntry(bytes, "4-net-replay/manifest.json").contains("cross-origin"))
+        assertTrue("failed capture must not fabricate a body", zipNames(bytes).none { it.endsWith(".body") })
+    }
+
+    @Test
+    fun buildZip_runtime_summary_is_valid_json_and_har_is_valid_json() {
+        val runtime = """
+            {
+              "live":[{
+                "url":"https://yjspy.xju.edu.cn/api/schedule",
+                "method":"POST",
+                "status":200,
+                "requestHeaders":{"Content-Type":"application/json"},
+                "responseHeaders":{"Content-Type":"application/json"},
+                "responseBody":"{\"ok\":true}"
+              }],
+              "replay":[{"url":"https://yjspy.xju.edu.cn/api/schedule","status":200}],
+              "weeks":[{"week":1,"status":200}]
+            }
+        """.trimIndent()
+        val bytes = JwCaptureDump.buildZip(
+            ctx = null,
+            school = stubSchool(),
+            result = stubResult(),
+            domInventoryJson = null,
+            cookiesFull = null,
+            storageJson = null,
+            linksJson = null,
+            resourceReplayJson = null,
+            networkLiveJson = runtime,
+        )
+        val summary = org.json.JSONObject(readEntry(bytes, "6-logs/collection-summary.json"))
+        assertTrue(summary.getInt("networkRecords") == 1)
+        assertTrue(summary.getInt("replayRecords") == 1)
+        assertTrue(summary.getInt("weekPlans") == 1)
+        val har = org.json.JSONObject(readEntry(bytes, "6-logs/capture.har"))
+        assertTrue(har.getJSONObject("log").getString("version") == "1.2")
+        val entry = har.getJSONObject("log").getJSONArray("entries").getJSONObject(0)
+        assertTrue(entry.has("time"))
+        assertTrue(entry.has("cache"))
+        assertTrue(entry.has("timings"))
+        assertTrue(entry.getJSONObject("request").has("queryString"))
+        assertTrue(entry.getJSONObject("response").has("redirectURL"))
+        // HAR 1.2 spec: response.content.size is a REQUIRED number.
+        val content = entry.getJSONObject("response").getJSONObject("content")
+        assertTrue("HAR content.size (spec-required) must exist", content.has("size"))
+        assertTrue(content.getLong("size") == content.getString("text").toByteArray(Charsets.UTF_8).size.toLong())
+    }
+
+    @Test
+    fun buildZip_har_redirect_url_only_populated_for_3xx() {
+        val runtime = """
+            {
+              "live":[
+                {"url":"https://yjspy.xju.edu.cn/login","method":"GET","status":302,
+                 "responseHeaders":{"Content-Type":"text/html"},"responseBody":"","finalUrl":"https://yjspy.xju.edu.cn/index"},
+                {"url":"https://yjspy.xju.edu.cn/api/schedule","method":"GET","status":200,
+                 "responseHeaders":{"Content-Type":"application/json"},"responseBody":"{}","finalUrl":""}
+              ]
+            }
+        """.trimIndent()
+        val bytes = JwCaptureDump.buildZip(
+            ctx = null, school = stubSchool(), result = stubResult(),
+            domInventoryJson = null, cookiesFull = null, storageJson = null,
+            linksJson = null, resourceReplayJson = null, networkLiveJson = runtime,
+        )
+        val entries = org.json.JSONObject(readEntry(bytes, "6-logs/capture.har"))
+            .getJSONObject("log").getJSONArray("entries")
+        val redirect = entries.getJSONObject(0).getJSONObject("response")
+        val plain = entries.getJSONObject(1).getJSONObject("response")
+        assertTrue("redirectURL filled only when 3xx", redirect.getString("redirectURL") == "https://yjspy.xju.edu.cn/index")
+        assertTrue("non-redirect entry must have empty redirectURL", plain.getString("redirectURL") == "")
+    }
+
+    @Test
+    fun buildZip_collect_log_lists_every_exported_file() {
+        val runtime = """
+            {
+              "live":[{"url":"https://yjspy.xju.edu.cn/a","method":"GET","status":200,
+                       "responseHeaders":{"Content-Type":"text/plain"},"responseBody":"bodyA"}],
+              "replay":[{"url":"https://yjspy.xju.edu.cn/b","status":200}],
+              "weeks":[{"week":3,"status":200}]
+            }
+        """.trimIndent()
+        val bytes = JwCaptureDump.buildZip(
+            ctx = null, school = stubSchool(), result = stubResult(),
+            domInventoryJson = null, cookiesFull = null, storageJson = null,
+            linksJson = null, resourceReplayJson = null, networkLiveJson = runtime,
+        )
+        val collectLog = readEntry(bytes, "6-logs/collect-log.txt")
+        for (line in listOf("summary.txt", "4-net-live/1.body", "4-net-replay-weeks/manifest.json", "6-logs/capture.har")) {
+            assertTrue("collect-log.txt must record $line", collectLog.contains(line))
+        }
+    }
+
+    @Test
     fun buildZip_writes_all_frame_snapshots_when_available() {
         val result = stubResult().copy(allFrames = listOf(
             "(top)" to "<html>top</html>",
@@ -140,6 +258,35 @@ class JwCaptureDumpContentTest {
         ))
         val names = zipNames(JwCaptureDump.buildZip(null, stubSchool(), result, null))
         assertTrue("all frame html must be exported", names.count { it.startsWith("frames/") } >= 2)
+    }
+
+    @Test
+    fun buildZip_week_replay_manifest_records_concurrency_mode() {
+        val runtime = """
+            {
+              "weeks":[{"week":1,"status":200},{"week":2,"status":0,"error":"abort"}]
+            }
+        """.trimIndent()
+        val bytes = JwCaptureDump.buildZip(
+            ctx = null, school = stubSchool(), result = stubResult(),
+            domInventoryJson = null, cookiesFull = null, storageJson = null,
+            linksJson = null, resourceReplayJson = null, networkLiveJson = runtime,
+        )
+        val manifestText = readEntry(bytes, "4-net-replay-weeks/manifest.json")
+        val manifest = org.json.JSONArray(manifestText)
+        assertTrue(manifest.length() == 2)
+        assertTrue(manifest.getJSONObject(0).getInt("week") == 1)
+    }
+
+    @Test
+    fun buildZip_weeks_manifest_written_when_only_weeks_present() {
+        val runtime = """{"weeks":[{"week":1,"status":200}]}"""
+        val bytes = JwCaptureDump.buildZip(
+            ctx = null, school = stubSchool(), result = stubResult(),
+            domInventoryJson = null, cookiesFull = null, storageJson = null,
+            linksJson = null, resourceReplayJson = null, networkLiveJson = runtime,
+        )
+        assertTrue(zipNames(bytes).contains("4-net-replay-weeks/manifest.json"))
     }
 
     private fun zipNames(bytes: ByteArray): Set<String> = buildSet {

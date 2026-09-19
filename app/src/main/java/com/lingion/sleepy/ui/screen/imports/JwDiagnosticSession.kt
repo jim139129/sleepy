@@ -49,13 +49,30 @@ object JwDiagnosticSession {
     )
 
     private val requests = ConcurrentLinkedDeque<RequestLog>()
+    private val jsNetwork = ConcurrentLinkedDeque<String>()
+    private data class DownloadLog(
+        val ts: Long,
+        val url: String,
+        val userAgent: String,
+        val contentDisposition: String,
+        val mime: String,
+        val length: Long,
+        // 下载实体 (前 2MB) — 桌面 collector 4-downloads/ 对标: 导出 xls/ics 课表文件本身
+        // 常是协议取证的关键证据, 只记元数据 = 静默丢文件。
+        val body: ByteArray? = null,
+        val bodyTruncated: Boolean = false,
+    )
+
     private val consoles = ConcurrentLinkedDeque<ConsoleLog>()
+    private val downloads = ConcurrentLinkedDeque<DownloadLog>()
     private val startTimeMs = SystemClock.elapsedRealtime()
     private var sessionId: String = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
 
     fun resetSession() {
         requests.clear()
+        jsNetwork.clear()
         consoles.clear()
+        downloads.clear()
         sessionId = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
     }
 
@@ -67,7 +84,7 @@ object JwDiagnosticSession {
             ts = SystemClock.elapsedRealtime() - startTimeMs,
             method = request.method ?: "GET",
             url = request.url?.toString() ?: "",
-            status = response?.let { inferStatus(it) } ?: 0,
+            status = response?.let { inferStatus(it) } ?: -1,
             mime = response?.mimeType,
             requestHeaders = headersText(request.requestHeaders),
             responseHeaders = response?.let { headersText(it.responseHeaders) },
@@ -106,6 +123,59 @@ object JwDiagnosticSession {
         while (consoles.size > RING_LIMIT) consoles.pollLast()
     }
 
+    fun recordDownload(url: String?, userAgent: String?, contentDisposition: String?, mime: String?, length: Long) {
+        recordDownload(url, userAgent, contentDisposition, mime, length, null)
+    }
+
+    /** 下载实捕获版 — body 前 2MB 落 ring buffer; 桌面 collector 4-downloads/ 对标。 */
+    fun recordDownload(
+        url: String?,
+        userAgent: String?,
+        contentDisposition: String?,
+        mime: String?,
+        length: Long,
+        body: ByteArray?,
+    ) {
+        if (url.isNullOrBlank()) return
+        val cap = 2 * 1024 * 1024
+        val truncated = body != null && body.size > cap
+        downloads.addFirst(DownloadLog(
+            SystemClock.elapsedRealtime() - startTimeMs,
+            url,
+            userAgent.orEmpty(),
+            contentDisposition.orEmpty(),
+            mime.orEmpty(),
+            length,
+            body?.let { if (truncated) it.copyOf(cap) else it },
+            truncated,
+        ))
+        while (downloads.size > RING_LIMIT) downloads.pollLast()
+    }
+
+    /** 按记录顺序导出下载实体字节 (null = 该条无实体)。 */
+    fun exportDownloadBodies(): List<Pair<Int, ByteArray>> =
+        downloads.toList().asReversed().mapIndexedNotNull { idx, d ->
+            d.body?.let { idx to it }
+        }
+
+    fun exportDownloads(): String = buildString {
+        appendLine("# Download metadata")
+        downloads.toList().asReversed().forEach { d ->
+            appendLine("+${d.ts}ms ${d.mime} ${d.length} ${d.url}")
+            appendLine("  User-Agent: ${d.userAgent}")
+            appendLine("  Content-Disposition: ${d.contentDisposition}")
+        }
+    }
+
+    /** 页面 recorder 的增量回调，限制单条大小和总条数，避免异常页面耗尽内存。 */
+    fun recordJsNetwork(json: String) {
+        if (json.isBlank()) return
+        jsNetwork.addFirst(json.take(512 * 1024))
+        while (jsNetwork.size > RING_LIMIT) jsNetwork.pollLast()
+    }
+
+    fun exportJsNetwork(): String = jsNetwork.toList().asReversed().joinToString(",", "[", "]")
+
     /** dump 阶段由 JwCaptureDump 调用,生成 netlog.txt 用的文本。 */
     fun exportNetlog(): String = buildString {
         appendLine("# Session: $sessionId")
@@ -117,7 +187,7 @@ object JwDiagnosticSession {
                 if (r.isMainFrame) append(" MAIN")
                 if (r.isRedirect) append(" REDIRECT")
             }
-            appendLine("+${r.ts}ms ${r.method} ${r.status} ${r.mime ?: "-"}$flags ${r.url}")
+            appendLine("+${r.ts}ms ${r.method} ${if (r.status < 0) "unknown" else r.status} ${r.mime ?: "-"}$flags ${r.url}")
             r.requestHeaders?.let { h ->
                 appendLine("  > ${h.replace("\n", "\n  > ")}")
             }

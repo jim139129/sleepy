@@ -27,6 +27,17 @@ class JwCaptureDumpContractTest {
     ).firstOrNull { it.isFile }?.readText() ?: error("Unable to load JwWebViewLoginScreen.kt source")
 
     @Test
+    fun cqu_fetch_script_is_wrapped_as_executable_iife() {
+        val start = loginScreen.indexOf("private const val CQU_FETCH_JS")
+        val end = loginScreen.indexOf("\n\"\"\"", start)
+        assertTrue("CQU_FETCH_JS 常量缺失", start >= 0 && end > start)
+        val script = loginScreen.substring(start, end)
+        assertTrue(script.contains("(function(){"))
+        assertTrue(script.contains("try {"))
+        assertTrue(script.trimEnd().endsWith("})();"))
+    }
+
+    @Test
     fun dump_creates_zip_with_five_files() {
         // zip 必须含: summary.txt, frames/, dom-inventory.txt, netlog.txt, console.txt
         assertTrue("必须有生成 zip 的方法", Regex("""fun\s+(createDump|exportDump|generateDump|buildDump)\s*\(""").containsMatchIn(source))
@@ -103,7 +114,21 @@ class JwCaptureDumpContractTest {
         assertTrue("必须有全帧落盘 allFrames", Regex("""allFrames""").containsMatchIn(source))
         assertTrue("LoginScreen 必须有 STORAGE_JS 常量", loginScreen.contains("STORAGE_JS"))
         assertTrue("LoginScreen 必须有 LINKS_JS 常量", loginScreen.contains("LINKS_JS"))
+        assertTrue("LoginScreen 必须有 RESOURCE_REPLAY_JS 常量", loginScreen.contains("RESOURCE_REPLAY_JS"))
+        assertTrue("资源重取只能使用 GET", loginScreen.contains("method:'GET'"))
+        assertTrue("资源重取必须携带当前 Cookie", loginScreen.contains("credentials:'include'"))
+        assertTrue("资源重取必须限制同源", loginScreen.contains("sameOrigin"))
+        assertTrue("单资源重取必须有超时", loginScreen.contains("controller.abort()") && loginScreen.contains("5000"))
+        assertTrue("总资源重取必须有超时", loginScreen.contains("totalTimer") && loginScreen.contains("15000"))
+        assertTrue("Promise 结果必须经 bridge 回传", loginScreen.contains("__sleepyDiagBridge.onReplayResult"))
+        assertTrue("导出完成后必须移除一次性 bridge", activitySource().contains("removeJavascriptInterface(\"__sleepyDiagBridge\")"))
+        assertTrue("Kotlin 侧必须给 bridge 等待设置上限", activitySource().contains("withTimeoutOrNull(16_000L)"))
     }
+
+    private fun activitySource(): String = sequenceOf(
+        File("app/src/main/java/com/lingion/sleepy/ui/screen/imports/JwImportActivity.kt"),
+        File("src/main/java/com/lingion/sleepy/ui/screen/imports/JwImportActivity.kt"),
+    ).firstOrNull { it.isFile }?.readText() ?: error("Unable to load JwImportActivity.kt source")
 
     /** 导出时必须现场抓 Cookie 全量值(CookieManager.getCookie) — 1B 不脱敏。 */
     @Test
@@ -116,5 +141,85 @@ class JwCaptureDumpContractTest {
         assertTrue("导出必须现抓 STORAGE_JS", activity.contains("STORAGE_JS"))
         assertTrue("导出必须现抓 LINKS_JS", activity.contains("LINKS_JS"))
         assertTrue("导出必须传 cookiesFull/storageJson/linksJson 给 exportDump", Regex("""exportDump\s*\([^)]*cookiesFull""", RegexOption.DOT_MATCHES_ALL).containsMatchIn(activity))
+    }
+
+    /**
+     * iframe recorder: 桌面 collector / F12 collect.js 都对同源 iframe 重 instrument,
+     * 教务 frameset (XJU PageFrame) 内 fetch/XHR 是 dgData 来源, 漏录 = 静默丢半张图。
+     */
+    @Test
+    fun install_js_instruments_iframes_repeatedly() {
+        // 安装脚本里要遍历 window.frames 调用 instrument(win), 并用 setInterval / MutationObserver
+        // 兜底迟加载的子帧。
+        assertTrue(
+            "DIAGNOSTIC_NETWORK_INSTALL_JS must walk window.frames",
+            loginScreen.contains("window.frames") || loginScreen.contains("frames[")
+        )
+        assertTrue(
+            "must re-instrument late frames (setInterval / MutationObserver)",
+            loginScreen.contains("setInterval") || loginScreen.contains("MutationObserver")
+        )
+    }
+
+    /**
+     * DIAGNOSTIC_NETWORK_EXPORT_JS 周参数重放：桌面 collector 与 F12 都是串行(避免把
+     * 校务服务器打爆 / 触发风控)，Android 当前用 Promise.all 并发 250。这是真行为差。
+     */
+    @Test
+    fun export_js_serializes_week_replay_chained_promises() {
+        val start = loginScreen.indexOf("internal const val DIAGNOSTIC_NETWORK_EXPORT_JS")
+        assertTrue(start >= 0)
+        val js = loginScreen.substring(start, start + 6000)
+        // 串行: 用 .reduce((p,fn)=>p.then(fn)) / chain / forEach await
+        val serialized = js.contains(".reduce(") || js.contains("await ") || js.contains("then(function(prev")
+        assertTrue("week replay must be serialized (chain/reduce/await), not Promise.all", serialized)
+        // 反向断言: 不允许把所有 weekJobs push 进 Promise.all 一次性等
+        val block = "weekJobs.push(call(weekUrl,weekMethod,weekBody,r.requestHeaders||{}).then"
+        val allBlock = "Promise.all(weekJobs)"
+        assertTrue(
+            "week replay should NOT be a single Promise.all(weekJobs) — must chain",
+            !(block in js && allBlock in js && js.indexOf(block) < js.indexOf(allBlock))
+        )
+    }
+
+    /**
+     * JwImportActivity invokeOnCancellation 必须把 WebView 调用投递到主线程 —
+     * removeJavascriptInterface 在 chromium 是 UI-thread-only API。
+     */
+    @Test
+    fun invoke_on_cancellation_dispatches_webview_calls_to_main() {
+        val activity = activitySource()
+        // 至少有一段 invokeOnCancellation 体里把 removeJavascriptInterface 用 main.post 包住
+        val cancel = Regex("invokeOnCancellation\\s*\\{([\\s\\S]*?)\\}\\s*\\n[\\s]*\\}\\)")
+        val matches = cancel.findAll(activity).toList()
+        assertTrue("must have at least one invokeOnCancellation block", matches.isNotEmpty())
+        val anySafe = matches.any { m ->
+            val body = m.groupValues[1]
+            body.contains("main.post") && body.contains("removeJavascriptInterface")
+        }
+        assertTrue("invokeOnCancellation must post WebView calls to main thread", anySafe)
+    }
+
+    /**
+     * 下载处理：WebView setDownloadListener 触发后必须保存实体文件到 4-downloads/ —
+     * 桌面 collector 把实际文件字节落盘（xls/ics 课表导出常常靠它取证），Android
+     * 当前仅记元数据 = 静默丢文件。
+     */
+    @Test
+    fun download_listener_persists_file_bytes_to_4_downloads() {
+        // 1) JwDiagnosticSession 必须支持保存文件字节
+        val sessionSrc = sequenceOf(
+            File("app/src/main/java/com/lingion/sleepy/ui/screen/imports/JwDiagnosticSession.kt"),
+            File("src/main/java/com/lingion/sleepy/ui/screen/imports/JwDiagnosticSession.kt"),
+        ).firstOrNull { it.isFile }?.readText() ?: error("Unable to load JwDiagnosticSession.kt source")
+        assertTrue(
+            "JwDiagnosticSession must record download bytes (not just metadata)",
+            sessionSrc.contains("body: ByteArray?") || sessionSrc.contains("recordDownloadBody")
+        )
+        // 2) JwCaptureDump 写 4-downloads/ 目录时必须包含实际 .body 文件
+        assertTrue(
+            "buildZip must write 4-downloads/<n>.body for download captures",
+            source.contains("4-downloads/") && (source.contains(".body") || source.contains("downloadBytes"))
+        )
     }
 }

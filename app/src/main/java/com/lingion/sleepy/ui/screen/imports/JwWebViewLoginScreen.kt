@@ -506,6 +506,8 @@ private fun JwWebView(
                 )
                 // wisedu (金智) 协议：注册 JS 桥，async fetch 课表 JSON 完成后回调
                 addJavascriptInterface(WiseduBridge(onWiseduResult), "__sleepyBridge")
+                // 诊断桥常驻；页面内 recorder 只观察网络，不替换请求或响应。
+                addJavascriptInterface(DiagnosticNetworkBridge(), "__sleepyNetworkBridge")
                 settings.apply {
                     javaScriptEnabled = true
                     javaScriptCanOpenWindowsAutomatically = true
@@ -526,6 +528,31 @@ private fun JwWebView(
                 }
                 // 正常 WebView 配置
                 settings.databaseEnabled = true
+                setDownloadListener { downloadUrl, userAgent, contentDisposition, mimeType, contentLength ->
+                    JwDiagnosticSession.recordDownload(downloadUrl, userAgent, contentDisposition, mimeType, contentLength)
+                    // 实体抓取 — 桌面 collector 4-downloads/ 对标: 下载文件字节落诊断包
+                    // (导出 xls/ics 课表文件本身是协议证据)。后台线程 GET, 带 Cookie。
+                    java.util.concurrent.Executors.newSingleThreadExecutor().execute {
+                        val body = runCatching {
+                            val conn = java.net.URL(downloadUrl).openConnection() as java.net.HttpURLConnection
+                            conn.connectTimeout = 10_000
+                            conn.readTimeout = 15_000
+                            conn.instanceFollowRedirects = true
+                            android.webkit.CookieManager.getInstance().getCookie(downloadUrl)?.let {
+                                conn.setRequestProperty("Cookie", it)
+                            }
+                            if (userAgent?.isNotBlank() == true) conn.setRequestProperty("User-Agent", userAgent)
+                            conn.connect()
+                            if (conn.responseCode !in 200..299) null
+                            else conn.inputStream.use { ins -> ins.readNBytes(2 * 1024 * 1024) }
+                        }.getOrNull()
+                        if (body != null && body.isNotEmpty()) {
+                            JwDiagnosticSession.recordDownload(
+                                downloadUrl, userAgent, contentDisposition, mimeType, contentLength, body
+                            )
+                        }
+                    }
+                }
                 webChromeClient = object : android.webkit.WebChromeClient() {
                     override fun onProgressChanged(view: WebView?, newProgress: Int) {
                         onProgressChange(newProgress)
@@ -535,14 +562,19 @@ private fun JwWebView(
                         JwDiagnosticSession.recordConsole(msg)
                         return true
                     }
+
                 }
-                webViewClient = JwWebViewClientBuilder.build(
+                JwDiagnosticSession.resetSession()
+        evaluateJavascript(DIAGNOSTIC_NETWORK_INSTALL_JS, null)
+        webViewClient = JwWebViewClientBuilder.build(
                     webView = this,
                     school = school,
                     desktopMode = desktopUa,
                 ) { finished ->
                     Log.d("JwWebView", "onPageFinished url=$finished")
                     lastUrl = finished ?: url
+                    // Install after every navigation: page scripts may replace fetch/XHR globals.
+                    evaluateJavascript(DIAGNOSTIC_NETWORK_INSTALL_JS, null)
                 }
                 loadUrl(lastUrl)
                 onWebViewCreated(this)
@@ -886,6 +918,8 @@ private const val YETHAN_FETCH_JS = """
  * CQU（重庆大学门户）fetch 脚本：Bearer token 取自 localStorage。
  */
 private const val CQU_FETCH_JS = """
+(function(){
+  try {
     if (location.hostname.indexOf('cqu.edu.cn') < 0) {
       window.__sleepyBridge.onWiseduResult(JSON.stringify({ok:false, err:'请先登录并进入重庆大学门户后再点导入'}));
       return;
@@ -1792,6 +1826,26 @@ private class WiseduBridge(private val onResult: (String) -> Unit) {
     }
 }
 
+/** 页面内网络 recorder 的批量结果桥。记录本身留在 JS，避免每个请求跨 bridge。 */
+internal class DiagnosticNetworkBridge {
+    @android.webkit.JavascriptInterface
+    fun onNetworkRecord(json: String) {
+        // The recorder is intentionally pull-based; this callback is a compatibility hook
+        // for pages that choose to flush incrementally. The authoritative export uses pull.
+        JwDiagnosticSession.recordJsNetwork(json)
+    }
+}
+
+/** 导出诊断资源重取结果的 JS 桥；每次导出创建一次，避免跨页面串包。 */
+internal class DiagnosticReplayBridge(private val onResult: (String) -> Unit) {
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+    @android.webkit.JavascriptInterface
+    fun onReplayResult(json: String) {
+        main.post { onResult(json) }
+    }
+}
+
 /**
  * SSL 豁免注册表: 仅对学校 URL 的注册域 (含其子域) 放行自签/私有 CA 证书 —
  * 部分高校教务确用私有 CA。除此之外的 SSL 错误一律 cancel (中间人防护)。
@@ -1968,10 +2022,172 @@ const val LINKS_JS = """
     for (var o=0;o<os.length;o++){
       opts.push({v: os[o].getAttribute('value')||'', t: (os[o].textContent||'').trim().slice(0,60)});
     }
-    if (opts.length) selects.push({sel:s, name: ss[s].getAttribute('name')||'', id: ss[s].id||'', opts: opts});
+    if (opts.length) selects.push({sel:s, name:ss[s].getAttribute('name')||'', id:ss[s].id||'', opts:opts});
   }
   return JSON.stringify({url:location.href, links:links, selects:selects});
 })
+"""
+
+/**
+ * Passive runtime network recorder. It preserves native fetch/XHR behavior and records only
+ * what the page itself can observe. Bodies are intentionally retained unredacted for diagnosis.
+ */
+internal const val DIAGNOSTIC_NETWORK_INSTALL_JS = """
+(function(){
+  if (window.__sleepyDiagNetworkInstalled) return;
+  window.__sleepyDiagNetworkInstalled = true;
+  var rows = window.__sleepyDiagNetworkRecords = [];
+  var MAX_ROWS = 500, MAX_BODY = 512 * 1024;
+  function trim(v){ v = v == null ? '' : String(v); return v.length > MAX_BODY ? v.slice(0, MAX_BODY) + '\\n[truncated]' : v; }
+  function headers(h){ var o={}; try { h && h.forEach(function(v,k){o[k]=v;}); } catch(e) {} return o; }
+  function push(x){ x.ts = Date.now(); rows.push(x); if(rows.length > MAX_ROWS) rows.shift(); }
+  function instrument(win){
+    try {
+      if (!win || win.__sleepyDiagNetworkFramed) return;
+      win.__sleepyDiagNetworkFramed = true;
+      var nf = win.fetch;
+      if (nf) win.fetch = function(input, init){
+        var reqUrl = typeof input === 'string' ? input : (input && input.url) || '';
+        var method = (init && init.method) || (input && input.method) || 'GET';
+        var reqBody = init && init.body != null ? String(init.body) : '';
+        var reqHeaders = {};
+        try { if (input && input.headers) reqHeaders = headers(input.headers); } catch(e) {}
+        try { if (init && init.headers) { var ih = headers(init.headers); for (var hk in ih) reqHeaders[hk]=ih[hk]; } } catch(e) {}
+        return nf.apply(this, arguments).then(function(r){
+          var x={source:'fetch',url:r.url || reqUrl,finalUrl:r.url || reqUrl,method:String(method).toUpperCase(),requestBody:trim(reqBody),requestHeaders:reqHeaders,status:r.status,ok:r.ok,responseHeaders:headers(r.headers),frame:win===window?'top':'frame'};
+          try { x.redirected=!!r.redirected; } catch(e) {}
+          return r.clone().text().then(function(b){ x.responseBody=trim(b); push(x); return r; },function(e){x.error=String(e);push(x);return r;});
+        }, function(e){ push({source:'fetch',url:reqUrl,method:String(method).toUpperCase(),requestBody:trim(reqBody),status:0,error:String(e),frame:win===window?'top':'frame'}); throw e; });
+      };
+      var NX = win.XMLHttpRequest;
+      if (NX) {
+        var open = NX.prototype.open, send = NX.prototype.send, setHeader = NX.prototype.setRequestHeader;
+        NX.prototype.open = function(method,url){ this.__sleepyDiag={method:String(method||'GET').toUpperCase(),url:String(url||''),headers:{}}; return open.apply(this,arguments); };
+        NX.prototype.setRequestHeader = function(k,v){ if(this.__sleepyDiag) this.__sleepyDiag.headers[k]=String(v); return setHeader.apply(this,arguments); };
+        NX.prototype.send = function(body){ var xhr=this, meta=this.__sleepyDiag || {method:'GET',url:''}; meta.requestBody=trim(body == null ? '' : body); function done(){ var x={source:'xhr',url:meta.url,finalUrl:meta.url,method:meta.method,requestBody:meta.requestBody,status:0,requestHeaders:meta.headers,frame:win===window?'top':'frame'}; try{x.status=xhr.status;x.responseHeaders=xhr.getAllResponseHeaders();x.responseBody=trim(typeof xhr.responseText==='string'?xhr.responseText:'');}catch(e){x.error=String(e);} push(x); } this.addEventListener('loadend',done,{once:true}); return send.apply(this,arguments); };
+      }
+    } catch(e) {}
+  }
+  instrument(window);
+  // 同源 iframe 立即 instrument (XJU PageFrame / HEBZYHJ qz 等 frameset 教务)
+  try { for (var i=0;i<window.frames.length;i++) instrument(window.frames[i]); } catch(e) {}
+  // 迟加载的子帧 — setInterval 兜底, 适配 history API 重置的 frame
+  setInterval(function(){
+    try { for (var j=0;j<window.frames.length;j++) instrument(window.frames[j]); } catch(e) {}
+  }, 1500);
+})();
+"""
+
+internal const val DIAGNOSTIC_NETWORK_SNAPSHOT_JS = """
+(function(){ try { return JSON.stringify({live:window.__sleepyDiagNetworkRecords || []}); } catch(e) { return '{\"live\":[]}'; } })()
+"""
+
+internal const val DIAGNOSTIC_NETWORK_EXPORT_JS = """
+(function(){
+  var live = window.__sleepyDiagNetworkRecords || [];
+  var same = function(u){ try{return new URL(u,location.href).origin===location.origin;}catch(e){return false;} };
+  var replaceParam = function(text,name,value){
+    var re = new RegExp('([?&]' + name + '=|(^|&)'+name+'=)([^&]*)','i');
+    return re.test(text) ? text.replace(re,function(_,p){return p+encodeURIComponent(value);}) : text;
+  };
+  var weekOf = function(r){
+    var s=(r.url||'')+'\n'+(r.requestBody||'');
+    var m=s.match(/(?:^|[?&\s])((?:week|zc|weekIndex|zhouci|xq))=([^&\s]*)/i);
+    return m ? {name:m[1],value:m[2]} : null;
+  };
+  var call = function(url, method, body, headers){
+    var opts={method:method,credentials:'include',cache:'no-store'};
+    if(method==='POST'){opts.body=body||''; opts.headers=headers||{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'};}
+    return fetch(url,opts).then(function(r){return r.text().then(function(b){return {url:r.url||url,method:method,status:r.status,body:b,headers:(function(){var o={};try{r.headers.forEach(function(v,k){o[k]=v;});}catch(e){}return o;})()};});}).catch(function(e){return {url:url,method:method,status:0,error:String(e)};});
+  };
+  var replay = [];
+  var jobs=[];
+  for(var i=0;i<live.length && jobs.length<40;i++){
+    var r=live[i]; if(!r||!same(r.url)||!r.url||r.source==='resource') continue;
+    if(String(r.method).toUpperCase()==='POST') jobs.push(call(r.url,'POST',r.requestBody||'',r.requestHeaders||{}));
+  }
+  Promise.all(jobs).then(function(rs){ replay=rs; flushWeeks(replay); },function(){ flushWeeks(replay); });
+
+  var weekState = [];
+  function flushWeeks(replay){
+    var seen={};
+    for(var i=0;i<live.length && Object.keys(seen).length<10;i++){
+      var r=live[i], w=weekOf(r); if(!r||!w||!same(r.url)) continue;
+      var key=r.method+' '+r.url+' '+w.name; if(seen[key]) continue; seen[key]=1;
+      weekState.push({key:key,r:r,name:w.name});
+    }
+    // 周重放必须串行(对齐桌面 collector): 校务服务器对 10 API × 25 周并发 = 风控/封禁风险。
+    // 链式 reduce 逐个请求, 单项失败不影响后续。
+    var tasks=[];
+    weekState.forEach(function(ws){
+      for(var n=1;n<=25;n++){
+        var r=ws.r, method=String(r.method).toUpperCase();
+        var u=r.url, b=r.requestBody||'';
+        if(method==='POST') b=replaceParam(b,ws.name,String(n)); else u=replaceParam(u,ws.name,String(n));
+        (function(week, weekName, weekMethod, weekUrl, weekBody){
+          tasks.push(function(){
+            return call(weekUrl,weekMethod,weekBody,ws.r.requestHeaders||{}).then(function(res){
+              res.week=week; res.name=weekName; res.url=res.url || weekUrl; return res;
+            }).catch(function(e){return {week:week,name:weekName,method:weekMethod,url:weekUrl,status:0,error:String(e)};});
+          });
+        })(n, ws.name, method, u, b);
+      }
+    });
+    tasks.reduce(function(p,fn){
+      return p.then(function(rs){ return fn().then(function(r){ rs.push(r); return rs; }); });
+    }, Promise.resolve([])).then(function(rs){
+      try { __sleepyDiagBridge.onReplayResult(JSON.stringify({live:live,replay:replay,weeks:rs})); } catch(e) {}
+    }, function(){
+      try { __sleepyDiagBridge.onReplayResult(JSON.stringify({live:live,replay:replay,weeks:[]})); } catch(e) {}
+    });
+  }
+})()
+"""
+
+/**
+ * 排查包专用 — 重取页面已经加载过的同源文本资源。
+ * 只重放 GET, 使用浏览器缓存和当前 Cookie; 不重放 POST/表单写操作。
+ * 每项保留 url/status/mime/body 或 error, 失败项不能被伪造为成功响应。
+ * evaluateJavascript 不等待 Promise, 所以最终 JSON 经一次性 JS bridge 回传。
+ */
+const val RESOURCE_REPLAY_JS = """
+(function(){
+  var entries=[];
+  var seen={};
+  var resources=[];
+  try { resources=performance.getEntriesByType('resource') || []; } catch(e) {}
+  resources.push({name:location.href, initiatorType:'document'});
+  function sameOrigin(u){ try { return new URL(u,location.href).origin===location.origin; } catch(e){ return false; } }
+  function abs(u){ try { return new URL(u,location.href).href; } catch(e){ return String(u||''); } }
+  function one(u){
+    u=abs(u);
+    if (!u || seen[u] || !sameOrigin(u)) return Promise.resolve();
+    seen[u]=1;
+    var controller = window.AbortController ? new AbortController() : null;
+    var timer = controller ? setTimeout(function(){controller.abort();},5000) : null;
+    var opts={method:'GET',credentials:'include',cache:'force-cache'};
+    if (controller) opts.signal=controller.signal;
+    return fetch(u,opts)
+      .then(function(r){
+        return r.text().then(function(body){
+          entries.push({url:u,status:r.status,mime:r.headers.get('content-type')||'',body:body});
+        });
+      })
+      .catch(function(e){ entries.push({url:u,status:0,mime:'',error:String(e)}); })
+      .then(function(){ if (timer) clearTimeout(timer); });
+  }
+  var jobs=[];
+  for (var i=0;i<resources.length;i++) {
+    var u=resources[i] && resources[i].name;
+    if (u) jobs.push(one(u));
+  }
+  function done(){
+    try { __sleepyDiagBridge.onReplayResult(JSON.stringify(entries)); } catch(e) {}
+  }
+  var all = Promise.all(jobs);
+  var totalTimer = setTimeout(function(){ done(); },15000);
+  all.then(function(){ clearTimeout(totalTimer); done(); },function(){ clearTimeout(totalTimer); done(); });
+})()
 """
 
 /** 单次抓取: evaluateJavascript → FrameSnapshot.fromJson → selectBestFrame。回调已在主线程。 */

@@ -64,11 +64,28 @@ object JwCaptureDump {
         cookiesFull: String?,
         storageJson: String?,
         linksJson: String?,
+    ): DumpResult = exportDump(
+        ctx, school, result, domInventoryJson, cookiesFull, storageJson, linksJson, null
+    )
+
+    fun exportDump(
+        ctx: Context,
+        school: JwSchoolInfo,
+        result: FrameCaptureResult,
+        domInventoryJson: String?,
+        cookiesFull: String?,
+        storageJson: String?,
+        linksJson: String?,
+        resourceReplayJson: String?,
+        networkLiveJson: String? = null,
     ): DumpResult {
         val stamp = JwDiagnosticSession.currentSessionId()
         val zipName = "$ZIP_BASE-$stamp.zip"
         return try {
-            val zipBytes = buildZip(ctx, school, result, domInventoryJson, cookiesFull, storageJson, linksJson)
+            val zipBytes = buildZip(
+                ctx, school, result, domInventoryJson,
+                cookiesFull, storageJson, linksJson, resourceReplayJson, networkLiveJson
+            )
             val uri = writeZip(ctx, zipName, zipBytes)
             if (uri != null) {
                 DumpResult.Ok(zipName, uri)
@@ -97,6 +114,20 @@ object JwCaptureDump {
         cookiesFull: String?,
         storageJson: String?,
         linksJson: String?,
+    ): ByteArray = buildZip(
+        ctx, school, result, domInventoryJson, cookiesFull, storageJson, linksJson, null
+    )
+
+    fun buildZip(
+        ctx: Context?,
+        school: JwSchoolInfo,
+        result: FrameCaptureResult,
+        domInventoryJson: String?,
+        cookiesFull: String?,
+        storageJson: String?,
+        linksJson: String?,
+        resourceReplayJson: String?,
+        networkLiveJson: String? = null,
     ): ByteArray {
         val manifest = mutableListOf<Pair<String, String>>()  // (path, description)
         val out = java.io.ByteArrayOutputStream()
@@ -109,7 +140,15 @@ object JwCaptureDump {
             writeText(zos, manifest, "cookies-full.txt", cookiesFull ?: "(no cookies captured)", "Cookie 全量值(1B 不脱敏, 排查登录态)")
             writeText(zos, manifest, "5-storage/storage.json", storageJson ?: "{\"sessionStorage\":{},\"localStorage\":{}}", "Web Storage 全量键值(sessionStorage + localStorage)")
             writeText(zos, manifest, "2-inline/links.json", linksJson ?: "{\"links\":[],\"selects\":[]}", "页面链接全集 + select 下拉枚举(学期码)")
+            writeResourceReplay(zos, manifest, resourceReplayJson)
+            writeNetworkLive(zos, manifest, networkLiveJson ?: JwDiagnosticSession.exportJsNetwork())
             writeEnvironment(zos, manifest, ctx)
+            // 桌面 collector 6-logs/collect-log.txt 对标 — 逐文件采集记录 (时间序)。
+            writeText(
+                zos, manifest, "6-logs/collect-log.txt",
+                buildCollectLog(manifest),
+                "采集过程逐文件日志(时间序, 对标桌面 collector)"
+            )
             writeIndex(zos, manifest)
         }
         return out.toByteArray()
@@ -172,6 +211,196 @@ object JwCaptureDump {
     }
 
     /** 设备/WebView 环境 — 适配者一眼看到 SDK/包名/UA/WebView 实现。 */
+    /**
+     * Writes the real same-origin resource responses collected in the WebView page.
+     * Entries with an error remain metadata-only; no synthetic body is generated.
+     */
+    private fun writeResourceReplay(
+        zos: ZipOutputStream,
+        manifest: MutableList<Pair<String, String>>,
+        json: String?,
+    ) {
+        val raw = json?.takeIf { it.isNotBlank() } ?: return
+        val rows = runCatching { org.json.JSONArray(raw) }.getOrNull() ?: return
+        val manifestJson = rows.toString()
+        writeText(zos, manifest, "4-net-replay/manifest.json", manifestJson, "资源重取结果与失败原因")
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            val body = row.optString("body", "")
+            if (body.isBlank() || row.has("error")) continue
+            val path = "4-net-replay/${i + 1}.body"
+            writeText(zos, manifest, path, body, "同源资源真实响应体")
+        }
+    }
+
+    private fun writeNetworkLive(
+        zos: ZipOutputStream,
+        manifest: MutableList<Pair<String, String>>,
+        json: String?,
+    ) {
+        val raw = json?.takeIf { it.isNotBlank() } ?: "{\"live\":[],\"replay\":[],\"weeks\":[]}"
+        val root = runCatching { org.json.JSONObject(raw) }.getOrNull() ?: org.json.JSONObject()
+        val rows = root.optJSONArray("live") ?: org.json.JSONArray()
+        val replay = root.optJSONArray("replay") ?: org.json.JSONArray()
+        val weeks = root.optJSONArray("weeks") ?: org.json.JSONArray()
+        writeText(zos, manifest, "4-net-live/manifest.json", rows.toString(), "页面运行时真实 fetch/XHR 请求与响应")
+        val headers = StringBuilder()
+        val urls = LinkedHashSet<String>()
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            val url = row.optString("url", "")
+            if (url.isNotBlank()) urls += url
+            val responseHeaders = row.opt("responseHeaders")
+            if (responseHeaders != null && responseHeaders.toString().isNotBlank()) {
+                headers.append("== ").append(row.optString("method", "GET"))
+                    .append(" ").append(url).append(" ==\n")
+                    .append(responseHeaders).append("\n\n")
+            }
+            val body = row.optString("responseBody", "")
+            if (body.isNotBlank()) writeText(zos, manifest, "4-net-live/${i + 1}.body", body, "真实响应正文")
+        }
+        if (replay.length() > 0) {
+            writeText(zos, manifest, "4-net-replay-withparam/manifest.json", replay.toString(), "基于已观察 POST 请求的重放结果")
+        }
+        if (weeks.length() > 0) {
+            writeText(zos, manifest, "4-net-replay-weeks/manifest.json", weeks.toString(), "基于已观察周参数的 1..25 周重放计划")
+        }
+        writeText(zos, manifest, "6-logs/network-live.json", rows.toString(), "机器可读运行时网络记录")
+        writeText(zos, manifest, "6-logs/all-urls.txt", urls.joinToString("\n"), "运行时发现的 URL")
+        if (headers.isNotEmpty()) writeText(zos, manifest, "6-logs/response-headers.txt", headers.toString(), "运行时响应头汇总")
+        val downloadText = JwDiagnosticSession.exportDownloads()
+        if (downloadText.lines().size > 2) writeText(zos, manifest, "4-downloads/manifest.txt", downloadText, "WebView 下载元数据")
+        // 下载实体 — 桌面 collector 4-downloads/ 对标: 实际文件字节落包
+        JwDiagnosticSession.exportDownloadBodies().forEach { (idx, body) ->
+            zos.putNextEntry(ZipEntry("4-downloads/${idx + 1}.body"))
+            zos.write(body)
+            zos.closeEntry()
+            manifest += "4-downloads/${idx + 1}.body" to "真实下载文件字节(前 2MB)"
+        }
+        val har = buildHar(rows)
+        if (har != null) writeText(zos, manifest, "6-logs/capture.har", har, "HAR 1.2 网络回放文件")
+        val collectionSummary = org.json.JSONObject()
+            .put("networkRecords", rows.length())
+            .put("replayRecords", replay.length())
+            .put("weekPlans", weeks.length())
+            .put("responseBodies", rows.countBodies())
+        writeText(
+            zos,
+            manifest,
+            "6-logs/collection-summary.json",
+            collectionSummary.toString(2) + "\n",
+            "机器可读采集汇总"
+        )
+    }
+
+    /** Build a HAR 1.2 representation from runtime records. Bodies are bounded to 64 KiB
+     *  each to keep the file usable in browsers; full bodies live under 4-net-live. */
+    private fun buildHar(rows: org.json.JSONArray): String? {
+        if (rows.length() == 0) return null
+        val builder = org.json.JSONObject()
+        builder.put("log", org.json.JSONObject().apply {
+            put("version", "1.2")
+            put("creator", org.json.JSONObject().put("name", "sleepy-android").put("version", "android"))
+            val entries = org.json.JSONArray()
+            for (i in 0 until rows.length()) {
+                val row = rows.optJSONObject(i) ?: continue
+                val method = row.optString("method", "GET")
+                val url = row.optString("url", "")
+                val requestHeaders = toHarHeaders(row.optJSONObject("requestHeaders"))
+                val request = org.json.JSONObject()
+                    .put("method", method)
+                    .put("url", url)
+                    .put("httpVersion", "HTTP/1.1")
+                    .put("cookies", org.json.JSONArray())
+                    .put("headers", requestHeaders)
+                    .put("queryString", harQueryString(url))
+                    .put("headersSize", -1)
+                    .put("bodySize", row.optString("requestBody", "").toByteArray(Charsets.UTF_8).size)
+                val requestBody = row.optString("requestBody", "")
+                if (requestBody.isNotEmpty()) {
+                    request.put(
+                        "postData",
+                        org.json.JSONObject()
+                            .put("mimeType", row.optJSONObject("requestHeaders")?.optString("Content-Type", "") ?: "")
+                            .put("text", requestBody)
+                    )
+                }
+                val status = row.optInt("status", -1)
+                val responseHeaders = toHarHeaders(row.optJSONObject("responseHeaders"))
+                val raw = row.optString("responseBody", "")
+                val truncated = if (raw.length > 65536) raw.substring(0, 65536) else raw
+                val response = org.json.JSONObject()
+                    .put("status", if (status < 0) 0 else status)
+                    .put("statusText", if (status < 0) "unknown" else "")
+                    .put("httpVersion", "HTTP/1.1")
+                    .put("cookies", org.json.JSONArray())
+                    .put("headers", responseHeaders)
+                    .put("content", org.json.JSONObject()
+                        // HAR 1.2 spec: content.size is REQUIRED — full body size even when text is truncated.
+                        .put("size", raw.toByteArray(Charsets.UTF_8).size.toLong())
+                        .put("text", truncated)
+                        .put("mimeType", row.optJSONObject("responseHeaders")?.optString("Content-Type", "application/octet-stream") ?: "application/octet-stream"))
+                    // HAR 1.2: redirectURL is the redirect target; only meaningful on 3xx.
+                    .put("redirectURL", if (status in 300..399) row.optString("finalUrl", "") else "")
+                    .put("headersSize", -1)
+                    .put("bodySize", raw.toByteArray(Charsets.UTF_8).size)
+                val entry = org.json.JSONObject()
+                    .put("startedDateTime", "1970-01-01T00:00:00.000Z")
+                    .put("time", 0)
+                    .put("request", request)
+                    .put("response", response)
+                    .put("cache", org.json.JSONObject())
+                    .put("timings", org.json.JSONObject()
+                        .put("send", 0)
+                        .put("wait", 0)
+                        .put("receive", 0))
+                entries.put(entry)
+            }
+            put("entries", entries)
+        })
+        return builder.toString()
+    }
+
+    private fun harQueryString(url: String): org.json.JSONArray {
+        val query = runCatching { android.net.Uri.parse(url).query }.getOrNull().orEmpty()
+        val out = org.json.JSONArray()
+        if (query.isBlank()) return out
+        query.split('&').forEach { item ->
+            val parts = item.split('=', limit = 2)
+            out.put(org.json.JSONObject()
+                .put("name", parts.firstOrNull().orEmpty())
+                .put("value", parts.getOrNull(1).orEmpty()))
+        }
+        return out
+    }
+
+    /** collect-log.txt — 每个已导出文件一行; 对标桌面 collector 的采集过程日志。 */
+    private fun buildCollectLog(manifest: List<Pair<String, String>>): String = buildString {
+        appendLine("# Session: ${JwDiagnosticSession.currentSessionId()}")
+        appendLine("# Collected ${manifest.size} entries")
+        appendLine()
+        for ((path, _) in manifest) {
+            appendLine("+ collected $path")
+        }
+    }
+
+    private fun toHarHeaders(map: org.json.JSONObject?): org.json.JSONArray {
+        val out = org.json.JSONArray()
+        if (map == null) return out
+        val keys = map.keys()
+        while (keys.hasNext()) {
+            val k = keys.next()
+            out.put(org.json.JSONObject().put("name", k).put("value", map.optString(k, "")))
+        }
+        return out
+    }
+
+    private fun org.json.JSONArray.countBodies(): Int {
+        var count = 0
+        for (i in 0 until length()) if (optJSONObject(i)?.optString("responseBody", "").orEmpty().isNotBlank()) count++
+        return count
+    }
+
     private fun writeEnvironment(
         zos: ZipOutputStream,
         manifest: MutableList<Pair<String, String>>,

@@ -62,10 +62,35 @@ class JwErrorDialogContractTest {
     }
 
     @Test
+    fun status_message_uses_auto_dismissing_snackbar_lifecycle() {
+        assertTrue(
+            "状态提示必须使用 SnackbarHostState.showSnackbar 自动结束生命周期",
+            source.contains("SnackbarHostState") && source.contains("showSnackbar")
+        )
+        assertTrue(
+            "状态提示必须在 Snackbar 结束后清空",
+            Regex("""statusMsg\s*=\s*null""").containsMatchIn(statusBlock())
+        )
+        assertTrue(
+            "状态提示必须由 SnackbarHost 渲染",
+            statusBlock().contains("SnackbarHost(")
+        )
+        assertFalse(
+            "状态提示不能直接永久渲染 Snackbar",
+            statusBlock().contains("statusMsg?.let { msg ->")
+        )
+    }
+
+    @Test
     fun export_runs_off_main_thread() {
         // zip 组装是 IO 阻塞, 必须在 Dispatchers.IO
         val fn = exportFn()
         assertTrue("exportDump 必须在 Dispatchers.IO 执行", fn.contains("Dispatchers.IO"))
+    }
+
+    private fun statusBlock(): String {
+        val start = source.indexOf("LaunchedEffect(statusMsg)")
+        return if (start < 0) "" else source.substring(start)
     }
 
     private fun errorDialogBlock(): String {
@@ -81,6 +106,9 @@ class JwErrorDialogContractTest {
     private fun exportFn(): String {
         val start = source.indexOf("fun exportDiagnosticDump(")
         assertTrue("exportDiagnosticDump 函数缺失", start >= 0)
-        return source.substring(start, minOf(start + 3000, source.length))
+        val end = source.indexOf("fun handleExitChoice", start).let {
+            if (it < 0) source.length else it
+        }
+        return source.substring(start, end)
     }
 }
