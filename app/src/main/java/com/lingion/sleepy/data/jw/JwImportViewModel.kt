@@ -409,6 +409,9 @@ class JwImportViewModel(application: Application) : AndroidViewModel(application
                 || u.contains("jxgl.wyu")
                 || u.contains("jw.hbmu") -> JwProtocol.TYPE_CF
 
+            // ⑦a CF_NEW — 新青果 NTSS (FullCalendar 形态): /new/student/xsgrkb 唯一路径锚点
+            u.contains("/new/student/xsgrkb") -> JwProtocol.TYPE_CF_NEW
+
             // ⑦b CHAOXING — 超星综合教务 (xsd=学生端 path, queryKbForGrdb 个人课表接口)
             u.matches(Regex(".*/xsd(/|$).*"))
                 || u.contains("/xsd/pkgl/")
@@ -483,6 +486,13 @@ class JwImportViewModel(application: Application) : AndroidViewModel(application
                     || lower.contains("urpnova")
                     || lower.contains("/js/login/login.js") -> JwProtocol.TYPE_URP_NEW
 
+                // ⑦a CF_NEW — 新青果 NTSS: 课表页脚本路径特征, 必须先于 ⑦ CF
+                //    (NTSS 页脚可能同含乘方字样, 路径锚点更窄更准)
+                lower.contains("/new/student/xsgrkb")
+                        || lower.contains("getcalendarweekdatas")
+                        || lower.contains("ntsscalendar") -> JwProtocol.TYPE_CF_NEW
+
+
                 // ⑥ URP — displayTag 老 URP
                 lower.contains("displaytag")
                     || lower.contains("/checkcode")
@@ -554,6 +564,9 @@ class JwImportViewModel(application: Application) : AndroidViewModel(application
             if (lower.contains("/checkcode")) hits += "/checkCode"
             if (lower.contains("乘方教务")) hits += "乘方教务"
             if (lower.contains("乘方科技")) hits += "乘方科技"
+            if (lower.contains("/new/student/xsgrkb")) hits += "/new/student/xsgrkb"
+            if (lower.contains("getcalendarweekdatas")) hits += "getCalendarWeekDatas"
+            if (lower.contains("ntsscalendar")) hits += "ntsscalendar"
             if (lower.contains("iaaa.pku.edu.cn")) hits += "iaaa.pku.edu.cn"
             if (lower.contains("pku.edu.cn")) hits += "pku.edu.cn"
             if (lower.contains("北京大学选课系统")) hits += "北京大学选课系统"

@@ -28,6 +28,15 @@ object JwProtocol {
     const val TYPE_QZ_BR = "qz_br"
     const val TYPE_QZ_WITH_NODE = "qz_with_node"
     const val TYPE_CF = "cf"
+
+    /**
+     * 新青果 NTSS (青果/乘方新版, FullCalendar 形态, /new/student/xsgrkb/week.page)。
+     * 页面 DOM 无课表数据, 课程行由 POST /new/student/xsgrkb/getCalendarWeekDatas
+     * 按周返回; 节次时间在页面 businessHours JSON; 开学日 /new/xlxx/getDatesOfWeek。
+     * WebView 内逐周并行抓取 (CF_NEW_FETCH_JS) 合并, JwCfNewParser 解析。
+     * 首校: 江西中医药大学 (jiaowu.jxutcm.edu.cn, 2026-09 采集包实锤)。
+     */
+    const val TYPE_CF_NEW = "cf_new"
     const val TYPE_PKU = "pku"
     const val TYPE_BNUZ = "bnuz"
     const val TYPE_LOGIN = "login"
