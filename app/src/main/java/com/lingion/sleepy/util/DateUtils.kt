@@ -76,6 +76,9 @@ object DateUtils {
         return ref.plusDays(offset.toLong())
     }
 
+    /** 比较具体日历日期，不把 weekday 当作跨周的“今天”标记。 */
+    fun isDateToday(date: LocalDate, today: LocalDate = LocalDate.now()): Boolean = date == today
+
     /** ISO 周编号 */
     fun isoWeekNumber(date: LocalDate): Int = date.get(isoWeekFields.weekOfWeekBasedYear())
 

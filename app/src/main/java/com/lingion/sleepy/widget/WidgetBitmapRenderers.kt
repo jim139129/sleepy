@@ -828,7 +828,7 @@ object WidgetBitmapRenderers {
         for (i in shownDays.indices) {
             val day = shownDays[i]
             val x = outerPad + i * (colW + colGap)
-            val isToday = day.dayOfWeek == todayDow
+            val isToday = DateUtils.isDateToday(day.date)
             val cardBg = if (isToday) s.primaryContainer else s.surfaceContainer
 
             // 列背景
@@ -1094,7 +1094,7 @@ object WidgetBitmapRenderers {
         for (i in shownDays.indices) {
             val day = shownDays[i]
             val x = outerPad + i * (colW + colGap)
-            val isToday = day.dayOfWeek == todayDow
+            val isToday = DateUtils.isDateToday(day.date)
             val cardBg = if (isToday) s.primaryContainer else s.surfaceContainer
 
             // 列背景

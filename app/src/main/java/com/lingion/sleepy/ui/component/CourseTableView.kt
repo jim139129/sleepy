@@ -115,6 +115,7 @@ fun CardsGridView(
     startDate: String = "",
     currentWeek: Int = 1,
     today: Int = DateUtils.todayDayOfWeek(),
+    todayDate: java.time.LocalDate = java.time.LocalDate.now(),
     onCourseClick: (CourseEntity) -> Unit,
     modifier: Modifier = Modifier,
     greyDays: Set<Int> = emptySet(),  // 本周应灰显的星期几 (1-7)
@@ -323,7 +324,9 @@ fun CardsGridView(
                         } else null
                         DayHeadCell(
                             day = day,
-                            isToday = day == today,
+                            isToday = startDate.isNotBlank() && runCatching {
+                                DateUtils.isDateToday(DateUtils.dateOfWeek(startDate, currentWeek, day), todayDate)
+                            }.getOrDefault(false),
                             isGrey = day in greyDays,
                             courseCount = courses.count { it.day == day },
                             dateStr = dateStr,
@@ -808,6 +811,9 @@ fun FullWeekView(
     displayMode: String = "node",
     timeJson: String = "",
     today: Int = DateUtils.todayDayOfWeek(),
+    todayDate: java.time.LocalDate = java.time.LocalDate.now(),
+    startDate: String = "",
+    currentWeek: Int = 1,
     onCourseClick: (CourseEntity) -> Unit,
     modifier: Modifier = Modifier,
     greyDays: Set<Int> = emptySet()
@@ -842,6 +848,9 @@ fun FullWeekView(
             byDay = byDay,
             visibleDays = visibleDays,
             today = today,
+            todayDate = todayDate,
+            startDate = startDate,
+            currentWeek = currentWeek,
             greyDays = greyDays,
             useAlias = useAlias,
             scale = scale,
@@ -854,6 +863,9 @@ fun FullWeekView(
             displayMode = displayMode,
             timeJson = timeJson,
             today = today,
+            todayDate = todayDate,
+            startDate = startDate,
+            currentWeek = currentWeek,
             onCourseClick = onCourseClick,
             greyDays = greyDays,
             scale = scale,
@@ -871,6 +883,9 @@ fun FullWeekView(
 private fun WeekStrip(
     byDay: Map<Int, List<CourseEntity>>,
     today: Int,
+    todayDate: java.time.LocalDate,
+    startDate: String,
+    currentWeek: Int,
     visibleDays: Set<Int>,
     greyDays: Set<Int> = emptySet(),
     useAlias: Boolean = false,
@@ -885,7 +900,9 @@ private fun WeekStrip(
     ) {
         for (day in visibleDays.sorted()) {
             val dayCourses = byDay[day].orEmpty()
-            val isToday = day == today
+            val isToday = startDate.isNotBlank() && runCatching {
+                DateUtils.isDateToday(DateUtils.dateOfWeek(startDate, currentWeek, day), todayDate)
+            }.getOrDefault(false)
             DaySummaryCell(
                 day = day,
                 courses = dayCourses,
@@ -994,6 +1011,9 @@ private fun DaySummaryCell(
 private fun DetailPanel(
     byDay: Map<Int, List<CourseEntity>>,
     today: Int,
+    todayDate: java.time.LocalDate,
+    startDate: String,
+    currentWeek: Int,
     visibleDays: Set<Int>,
     displayMode: String,
     timeJson: String,
@@ -1039,7 +1059,8 @@ private fun DetailPanel(
         ) {
             DayColumn(
                 days = split.first,
-                byDay = byDay, today = today, displayMode = displayMode, timeJson = timeJson,
+                byDay = byDay, today = today, todayDate = todayDate, startDate = startDate,
+                currentWeek = currentWeek, displayMode = displayMode, timeJson = timeJson,
                 onCourseClick = onCourseClick, greyDays = greyDays,
                 scale = scale, cornerRatio = cornerRatio,
                 modifier = Modifier.weight(1f)
@@ -1047,7 +1068,8 @@ private fun DetailPanel(
             if (split.second.isNotEmpty()) {
                 DayColumn(
                     days = split.second,
-                    byDay = byDay, today = today, displayMode = displayMode, timeJson = timeJson,
+                    byDay = byDay, today = today, todayDate = todayDate, startDate = startDate,
+                    currentWeek = currentWeek, displayMode = displayMode, timeJson = timeJson,
                     onCourseClick = onCourseClick, greyDays = greyDays,
                     scale = scale, cornerRatio = cornerRatio,
                     modifier = Modifier.weight(1f)
@@ -1069,7 +1091,9 @@ private fun DetailPanel(
                 DetailDayCard(
                     day = day,
                     courses = dayCourses,
-                    isToday = day == today,
+                    isToday = startDate.isNotBlank() && runCatching {
+                        DateUtils.isDateToday(DateUtils.dateOfWeek(startDate, currentWeek, day), todayDate)
+                    }.getOrDefault(false),
                     displayMode = displayMode,
                     timeJson = timeJson,
                     onCourseClick = onCourseClick,
@@ -1088,6 +1112,9 @@ private fun DayColumn(
     days: List<Int>,
     byDay: Map<Int, List<CourseEntity>>,
     today: Int,
+    todayDate: java.time.LocalDate,
+    startDate: String,
+    currentWeek: Int,
     displayMode: String,
     timeJson: String,
     onCourseClick: (CourseEntity) -> Unit,
@@ -1111,7 +1138,9 @@ private fun DayColumn(
             DetailDayCard(
                 day = day,
                 courses = dayCourses,
-                isToday = day == today,
+                isToday = startDate.isNotBlank() && runCatching {
+                    DateUtils.isDateToday(DateUtils.dateOfWeek(startDate, currentWeek, day), todayDate)
+                }.getOrDefault(false),
                 displayMode = displayMode,
                 timeJson = timeJson,
                 onCourseClick = onCourseClick,

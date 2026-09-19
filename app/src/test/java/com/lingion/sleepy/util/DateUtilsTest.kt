@@ -47,6 +47,16 @@ class DateUtilsTest {
     @Test fun invalidStartFallbackIsWeekOne() {
         assertEquals(1, DateUtils.currentWeek("bad-date", LocalDate.parse("2026-08-24")))
     }
+
+    @Test fun onlyTheConcreteDateIsTodayAcrossWeeks() {
+        val today = LocalDate.parse("2026-09-19") // Saturday
+        val currentSaturday = DateUtils.dateOfWeek("2026-09-14", 1, 6)
+        val nextSaturday = DateUtils.dateOfWeek("2026-09-14", 2, 6)
+
+        assertEquals(true, DateUtils.isDateToday(currentSaturday, today))
+        assertEquals(false, DateUtils.isDateToday(nextSaturday, today))
+        assertEquals(false, DateUtils.isDateToday(DateUtils.dateOfWeek("2026-09-14", 1, 5), today))
+    }
 }
 
 // ---- 非周一 startDate 归一回归 (issue #5: 2026-09-01 是周二, 显示成周一) ----
