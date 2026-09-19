@@ -17,11 +17,13 @@ import org.junit.Test
  *
  * 修复契约(结构锁定; 先例: ScheduleViewModeSessionContractTest —
  * 仓库无 Robolectric/Compose UI 测试, 声明式接线读源头文件等价于读编译产物):
- *   1. AppRoot 必须 rememberSaveableStateHolder() 并对每个 overlay 分支包
- *      SaveableStateProvider(稳定 key) — 栈页状态(滚动/折叠展开/输入)跨覆盖往返保真;
- *   1b. **AddCourse 例外**: 编辑/新增课程会话**不纳入** SaveableStateProvider —
+ *   1. 每个 overlay 屏幕必须是 NavHost 的 composable(Routes.X) 目的地 —
+ *      NavHost 为每个返回栈条目持有独立 SaveableState, 被覆盖时保存、弹回时恢复,
+ *      滚动位置/折叠展开/输入跨往返保真(ref #45 迁移前由 AppRoot 手工
+ *      SaveableStateProvider(overlay.name) 承担, 迁移后归 NavHost, 契约不变);
+ *   1b. **AddCourse 例外**: 编辑/新增课程会话**不纳入**任何保存作用域 —
  *      基线 §1.3 明确编辑课程会话在旋转/进程恢复时安全丢弃(防恢复成空表单重复加课),
- *      必须有注释锚定此例外及理由;
+ *      必须有恢复守卫锚定此例外;
  *   2. 4 个 tab 的内容切换处同样包 SaveableStateProvider(currentTab.name);
  *   3. GeneralSettingsScreen 的 expandedSections 必须 rememberSaveable(折叠展开态跨返回存活);
  *   4. JwImportActivity 的 stage 条件组合必须含 SaveableStateProvider(key=stage 类名);
@@ -39,48 +41,104 @@ class BackRestoreSaveableContractTest {
         } ?: error("Unable to load sources: ${relPaths.joinToString()}")
 
     private val mainSource: String by lazy { loadSource("MainActivity.kt") }
+    private val navSource: String by lazy { loadSource("ui/nav/SleepyNavHost.kt") }
+    private val routesSource: String by lazy { loadSource("ui/nav/SleepyRoutes.kt") }
+    private val navigatorSource: String by lazy { loadSource("ui/nav/SleepyNavigator.kt") }
     private val generalSource: String by lazy { loadSource("ui/screen/mine/GeneralSettingsScreen.kt") }
     private val jwImportSource: String by lazy { loadSource("ui/screen/imports/JwImportActivity.kt") }
     private val schoolSelectSource: String by lazy { loadSource("ui/screen/imports/SchoolSelectScreen.kt") }
 
-    /** 契约 1: AppRoot 必须引入 SaveableStateHolder 并用它包裹 overlay 分支内容 */
+    /**
+     * 契约 1: Routes 里除 main 之外每个路由常量都必须在 SleepyNavHost 注册为
+     * composable(Routes.X) 目的地。NavHost 给每个返回栈条目一套独立 SaveableState,
+     * 被覆盖时保存、弹回时恢复 — 这就是"返回后滚动/折叠/输入还在"的机制本体
+     * (ref #45 迁移前由 AppRoot 手工 SaveableStateProvider(overlay.name) 承担, 迁移后归 NavHost)。
+     * 自维护不变量: 新增路由常量却漏注册 = 那屏一进去就丢状态, 本测试直接红。
+     */
     @Test
-    fun appRoot_uses_SaveableStateProvider_for_overlay_branches() {
-        assertTrue(
-            "AppRoot must obtain a SaveableStateHolder via rememberSaveableStateHolder()",
-            Regex("""rememberSaveableStateHolder\(\)""").containsMatchIn(mainSource)
-        )
-        // overlay 分支内容必须经 SaveableStateProvider 包裹(至少覆盖 General/Holiday/WidgetManagement
-        // 三个报障页; 用 onBack = { popOverlay() } 段定位各分支体)
-        val branchKeys = listOf("General", "Holiday", "WidgetManagement")
-        branchKeys.forEach { key ->
+    fun every_overlay_route_is_registered_as_a_navhost_destination() {
+        val routes = Regex("""const val ([A-Z_0-9]+)\s*=\s*"([^"]+)""")
+            .findAll(routesSource)
+            .map { it.groupValues[1] to it.groupValues[2].substringBefore('?') }
+            .filter { it.first != "MAIN" }
+            .toList()
+        assertTrue("Routes 表未解析到任何 overlay 路由", routes.isNotEmpty())
+        routes.forEach { (name, pattern) ->
             assertTrue(
-                "Overlay branch '$key' content must be wrapped in SaveableStateProvider(\"$key\")",
-                Regex("""SaveableStateProvider\(\s*"$key"\s*\)""").containsMatchIn(mainSource)
+                "路由 $name (\"$pattern\") 必须在 SleepyNavHost 注册 composable(Routes.$name) — " +
+                    "漏注册 = 该屏没有独立保存作用域, 返回即丢状态",
+                Regex("""composable\(\s*Routes\.$name\b""").containsMatchIn(navSource)
             )
         }
     }
 
-    /** 契约 1b: AddCourse 分支必须留在 SaveableStateProvider 之外, 且注释锚定例外理由 */
+    /**
+     * 契约 1b: AddCourse 目的地刻意不在任何 SaveableStateProvider 内。
+     * 基线 §1.3: 编辑课程会话在旋转/进程恢复时安全丢弃 — 若纳入保存作用域,
+     * 进程重建会恢复出 editingCourse=null 的空表单, 用户以为在编辑却实际新增 → 重复加课。
+     */
     @Test
-    fun appRoot_AddCourse_branch_is_deliberately_outside_SaveableStateProvider() {
-        // 找 AddCourse 分支(条件行起点 → 下一个 overlay 分支之前), 其分支体内不得出现 SaveableStateProvider
-        val branchStart = mainSource.indexOf("if (topOverlay() == OverlayScreen.AddCourse")
-        assertTrue("AddCourse branch not found in AppRoot conditional composition", branchStart >= 0)
-        val nextBranch = mainSource.indexOf("if (topOverlay() == OverlayScreen.AllTables", branchStart)
-        assertTrue("Cannot delimit AddCourse branch (next branch marker missing)", nextBranch > branchStart)
-        val addCourseBranch = mainSource.substring(branchStart, nextBranch)
+    fun addCourse_route_is_deliberately_outside_any_saveable_scope() {
+        val block = balancedBlock(navSource, "composable(Routes.ADD_COURSE")
+        assertTrue("SleepyNavHost AddCourse 目的地不存在", block.isNotEmpty())
         assertFalse(
-            "AddCourse (edit-course session) must NOT be wrapped in SaveableStateProvider — " +
-                "edit sessions are safely discarded on rotation/process restore (baseline §1.3, " +
-                "prevents restoring an empty form and duplicate course creation)",
-            addCourseBranch.contains("SaveableStateProvider")
+            "AddCourse 禁止 SaveableStateProvider(基线 §1.3 编辑会话可丢弃例外, 防恢复空表单重复加课)",
+            Regex("""SaveableStateProvider\(""").containsMatchIn(block)
         )
-        // 例外必须有注释锚定(防后人"顺手补全"把编辑会话也纳入恢复)
         assertTrue(
-            "AddCourse exception must be documented with a comment explaining why (baseline §1.3)",
-            mainSource.contains("§1.3") || mainSource.contains("重复加课")
+            "AddCourse 例外必须留注释锚定理由(防后人\"顺手补全\"把编辑会话纳入恢复)",
+            block.contains("§1.3") || block.contains("重复加课")
         )
+    }
+
+    /** 契约 1b-2: 编辑课程会话必须是纯内存态(禁 rememberSaveable), 否则恢复出空表单重复加课 */
+    @Test
+    fun editing_course_session_is_not_persisted() {
+        val session = Regex("""class NavSession[\s\S]*?\n\}""").find(navigatorSource)?.value.orEmpty()
+        assertTrue("NavSession 不存在", session.isNotEmpty())
+        assertTrue(
+            "editingCourse 必须是普通 mutableStateOf(进程恢复即丢弃)",
+            Regex("""var editingCourse\b[\s\S]{0,80}?by\s+mutableStateOf""").containsMatchIn(session)
+        )
+        assertFalse(
+            "editingCourse 禁止 rememberSaveable(基线 §1.3)",
+            Regex("""editingCourse[\s\S]{0,120}?rememberSaveable""").containsMatchIn(session)
+        )
+    }
+
+    /** 契约 1b-3: 恢复守卫 — 进程恢复后 editing=true 但会话为空时必须弹掉 AddCourse */
+    @Test
+    fun restore_guard_pops_add_course_when_session_is_gone() {
+        val guard = balancedBlock(
+            navSource,
+            "LaunchedEffect(currentRoute, editingRouteFlag, editingRouteCourseId, deepLinkCourse?.id)",
+        )
+        assertTrue("AddCourse 恢复守卫不存在", guard.isNotEmpty())
+        assertTrue(
+            "守卫必须在 editing=true 且会话为空时弹掉 add_course",
+            Regex("""session\.editingCourse == null\s*&&\s*deepLinkCourse == null""").containsMatchIn(guard)
+        )
+        assertTrue("守卫必须针对 Routes.ADD_COURSE", guard.contains("Routes.ADD_COURSE"))
+        assertTrue("守卫必须调用 popBackStack", guard.contains("popBackStack"))
+    }
+
+    /** 从 anchor 起做花括号配平取完整代码块(比非贪婪正则可靠) */
+    private fun balancedBlock(source: String, anchor: String): String {
+        val start = source.indexOf(anchor)
+        if (start < 0) return ""
+        val open = source.indexOf('{', start)
+        if (open < 0) return ""
+        var depth = 0
+        for (i in open until source.length) {
+            when (source[i]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) return source.substring(start, i + 1)
+                }
+            }
+        }
+        return ""
     }
 
     /** 契约 2: 4 个 tab 的内容切换处必须包 SaveableStateProvider(currentTab.name) */
@@ -166,12 +224,4 @@ class BackRestoreSaveableContractTest {
         )
     }
 
-    /** 不得退化: 修复不得把编辑课程会话例外破坏掉(AppRoot 的栈 saver 语义保留) */
-    @Test
-    fun appRoot_keeps_overlayStack_saver_editing_course_exception() {
-        assertTrue(
-            "overlayStack rememberSaveable with editingCourse==null guard must remain (baseline §1.3)",
-            Regex("""if\s*\(editingCourse\s*==\s*null\)\s*stack\s+else\s+emptyList\(\)""").containsMatchIn(mainSource)
-        )
-    }
 }

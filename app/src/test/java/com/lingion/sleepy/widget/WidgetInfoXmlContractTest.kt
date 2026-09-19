@@ -88,6 +88,45 @@ class WidgetInfoXmlContractTest {
         }
     }
 
+    /** vivo 原子组件要求每个 receiver 都声明三件套，供智慧桌面识别和展示。 */
+    @Test
+    fun `every widget receiver declares vivo atomic component metadata`() {
+        val receivers = manifest.getElementsByTagName("receiver")
+        for (i in 0 until receivers.length) {
+            val receiver = receivers.item(i) as Element
+            val providerMeta = run {
+                val metas = receiver.getElementsByTagName("meta-data")
+                var provider: Element? = null
+                for (j in 0 until metas.length) {
+                    val meta = metas.item(j) as Element
+                    if (meta.getAttribute("android:name") == "android.appwidget.provider") {
+                        provider = meta
+                        break
+                    }
+                }
+                provider
+            } ?: continue
+            val receiverName = receiver.getAttribute("android:name")
+            fun metadata(name: String): Element? {
+                val metas = receiver.getElementsByTagName("meta-data")
+                for (j in 0 until metas.length) {
+                    val meta = metas.item(j) as Element
+                    if (meta.getAttribute("android:name") == name) return meta
+                }
+                return null
+            }
+            assertTrue("$receiverName must declare vivo_widget=true", metadata("vivo_widget")?.getAttribute("android:value") == "true")
+            val version = metadata("vivoWidgetVersion")?.getAttribute("android:value")?.toIntOrNull()
+            assertTrue("$receiverName must declare positive vivoWidgetVersion", version != null && version > 0)
+            val description = metadata("vivo.widget.description")
+            assertTrue(
+                "$receiverName must declare vivo.widget.description resource",
+                description?.getAttribute("android:resource")?.startsWith("@string/") == true
+            )
+            assertTrue("$receiverName provider metadata must remain present", providerMeta.getAttribute("android:resource").isNotEmpty())
+        }
+    }
+
     /**
      * 添加组件时不得弹出强制配置页(白屏闪烁)。
      * 所有现有变体首屏已自动绑定默认课表,无内容可让用户在首次添加时填写;

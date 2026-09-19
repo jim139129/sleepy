@@ -39,8 +39,13 @@ class ScheduleViewModeSessionContractTest {
     private val screenSource: String by lazy {
         loadSource("ui/screen/schedule/ScheduleScreen.kt")
     }
+    /**
+     * 会话层 = AppRoot(MainActivity) + NavHost(ui/nav/SleepyNavHost.kt)。
+     * ref #45 迁移后 MainTabs 的两个调用位(贴底 Scaffold / Dock)从 AppRoot 移入 NavHost
+     * 的 main 路由, 契约 4b 需要同时读两个文件才算覆盖会话层。
+     */
     private val mainSource: String by lazy {
-        loadSource("MainActivity.kt")
+        loadSource("MainActivity.kt") + "\n" + loadSource("ui/nav/SleepyNavHost.kt")
     }
 
     /** 契约 1: ScheduleScreen 不得自带 AppPrefs 启动默认 — 状态提升后组合局部态自取默认即回归本 bug */
@@ -96,27 +101,35 @@ class ScheduleViewModeSessionContractTest {
         )
     }
 
-    /** 契约 4b: MainTabs 两个调用位(贴底 Scaffold / Dock)都必须把状态注入下去 */
+    /**
+     * 契约 4b: MainTabs 两个调用位(贴底 Scaffold / Dock)都必须把会话层 viewMode
+     * 状态注入下去; **写回点必须在 AppRoot 单点**, 禁止在 NavHost 内重复赋值
+     * (ref #45: NavHost 重构后 MainTabs 改由 MainRoute 调用, 写回若就地 lambda
+     * 化, 会话层失去对 viewMode 的单点控制 — 跨实例状态漂移)。
+     */
     @Test
     fun mainActivity_passes_viewMode_through_every_MainTabs_call_site() {
-        // 只取调用位, 排除 "fun MainTabs(" 定义本身
         val callSites = Regex("""MainTabs\(""").findAll(mainSource)
             .filter { mainSource.substring(0, it.range.first).takeLast(4) != "fun " }
             .toList()
-        assertTrue("MainTabs call sites not found in MainActivity", callSites.size >= 2)
+        assertTrue("MainTabs call sites not found (NavHost MainRoute / MainActivity)", callSites.size >= 2)
         callSites.forEach { match ->
-            // 取该调用括号到闭合前的一段(下一个 "}" 前的参数区足够覆盖命名实参)
-            val tail = mainSource.substring(match.range.first)
-            val params = tail.substringAfter("MainTabs(").substringBefore(")")
+            // 取该调用起 800 字符覆盖命名实参区(原 substringBefore(")") 遇 lambda 即截断)
+            val tail = mainSource.substring(match.range.first, match.range.first + 800)
             assertTrue(
                 "Every MainTabs call site must pass viewMode = scheduleViewMode",
-                Regex("""viewMode\s*=\s*scheduleViewMode""").containsMatchIn(params)
+                Regex("""viewMode\s*=\s*scheduleViewMode""").containsMatchIn(tail)
             )
             assertTrue(
-                "Every MainTabs call site must pass onViewModeChange writing back to scheduleViewMode",
-                Regex("""onViewModeChange\s*=\s*\{\s*scheduleViewMode\s*=\s*it\s*\}""").containsMatchIn(params)
+                "Every MainTabs call site must pass onViewModeChange = onScheduleViewModeChange (hoisted write-back)",
+                Regex("""onViewModeChange\s*=\s*onScheduleViewModeChange""").containsMatchIn(tail)
             )
         }
+        // 单点写回: AppRoot 调用 SleepyNavHost 处必须把 onScheduleViewModeChange 接到 scheduleViewMode 的 setter
+        assertTrue(
+            "AppRoot must wire onScheduleViewModeChange = { scheduleViewMode = it } exactly once into SleepyNavHost",
+            Regex("""onScheduleViewModeChange\s*=\s*\{\s*scheduleViewMode\s*=\s*it\s*\}""").containsMatchIn(mainSource)
+        )
     }
 
     /** 契约 4c: ScheduleScreen 调用位必须接到注入参数 */

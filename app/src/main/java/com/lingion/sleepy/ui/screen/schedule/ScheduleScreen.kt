@@ -287,6 +287,8 @@ fun ScheduleScreen(
                         visibleDays = visibleDays,
                         displayMode = displayMode,
                         timeJson = state.effectiveCurrentTable?.timeJson ?: "",
+                        startDate = state.currentTable?.startDate ?: "",
+                        currentWeek = page + 1,
                         onCourseClick = { selectedCourse = it },
                         greyDays = greyDays
                     )

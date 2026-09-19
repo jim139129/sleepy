@@ -279,8 +279,8 @@ open class WeekGridWidgetProvider : AppWidgetProvider() {
             // day headers
             for ((idx, dow) in sortedDays.withIndex()) {
                 val cellX = x + timeW + gapW + idx * (dayW + gapW)
-                val isToday = dow == todayDow
                 val dayData = data.days.firstOrNull { it.dayOfWeek == dow }
+                val isToday = dayData != null && DateUtils.isDateToday(dayData.date)
                 val count = dayData?.courses?.size ?: 0
                 val dateStr = if (data.showDate && dayData != null) DateUtils.shortDate(dayData.date) else null
 
@@ -413,7 +413,7 @@ open class WeekGridWidgetProvider : AppWidgetProvider() {
             for ((idx, dow) in sortedDays.withIndex()) {
                 val colX = x + timeW + gapW + idx * (dayW + gapW)
                 val dayData = data.days.firstOrNull { it.dayOfWeek == dow } ?: continue
-                val isToday = dow == todayDow
+                val isToday = DateUtils.isDateToday(dayData.date)
 
                 // today 背景列
                 if (isToday) {
