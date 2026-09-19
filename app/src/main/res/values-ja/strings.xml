@@ -10,6 +10,9 @@
     <string name="widget_twoday_small_label">直近2日 · 小</string>
     <string name="widget_week_view_label">今週の時間割（ビュー）</string>
     <string name="widget_week_view_small_label">今週の時間割（ビュー）· 小</string>
+    <string name="widget_today_small_label">今日 · 小</string>
+    <string name="widget_week_grid_small_label">今週の時間割（グリッド）· 小</string>
+    <string name="widget_week_list_small_label">今週の時間割（リスト）· 小</string>
 
     <!-- Widget picker descriptions (also used as vivo atomic-component detail text). -->
     <string name="widget_today_description">今日の授業を表示</string>

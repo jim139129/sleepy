@@ -10,6 +10,9 @@
     <string name="widget_twoday_small_label">最近兩天 · 小</string>
     <string name="widget_week_view_label">本週課表（週檢視）</string>
     <string name="widget_week_view_small_label">本週課表（週檢視）· 小</string>
+    <string name="widget_today_small_label">今日課程 · 小</string>
+    <string name="widget_week_grid_small_label">本週課表（網格）· 小</string>
+    <string name="widget_week_list_small_label">本週課表（列表）· 小</string>
 
     <!-- Widget picker descriptions (also used as vivo atomic-component detail text). -->
     <string name="widget_today_description">顯示今天的課程安排</string>

@@ -112,10 +112,23 @@ class WidgetInfoXmlContractTest {
         }
     }
 
-    /** Widget picker / OEM detail text must be localized with every shipped locale. */
+    /** Widget picker / OEM text must be localized with every shipped locale. */
     @Test
-    fun `all shipped locales define every widget description string`() {
+    fun `all shipped locales define every widget label and description string`() {
         val required = listOf(
+            "widget_today_label",
+            "widget_today_small_label",
+            "widget_today_wide_label",
+            "widget_twoday_label",
+            "widget_twoday_small_label",
+            "widget_twoday_wide_label",
+            "widget_week_list_label",
+            "widget_week_list_small_label",
+            "widget_week_list_wide_label",
+            "widget_week_view_label",
+            "widget_week_view_small_label",
+            "widget_week_grid_label",
+            "widget_week_grid_small_label",
             "widget_today_description",
             "widget_today_small_description",
             "widget_today_wide_description",
