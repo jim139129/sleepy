@@ -222,4 +222,55 @@ class JwCaptureDumpContractTest {
             source.contains("4-downloads/") && (source.contains(".body") || source.contains("downloadBytes"))
         )
     }
+
+    /** 审计#3: 下载抓取线程池必须有界且 daemon, 否则每条下载泄漏一个核心线程。 */
+    @Test
+    fun download_listener_uses_bounded_executor() {
+        val usesBoundedPool = loginScreen.contains("Executors.newFixedThreadPool") ||
+            loginScreen.contains("Executors.newCachedThreadPool") ||
+            loginScreen.contains("Executors.newScheduledThreadPool") ||
+            loginScreen.contains("Executors.newWorkStealingPool") ||
+            loginScreen.contains(".shutdown()") ||
+            loginScreen.contains("shutdownNow()")
+        assertTrue(
+            "download fetch must use a bounded/daemon executor (Fixed/Cached/Scheduled/WorkStealing) or shutdown",
+            usesBoundedPool
+        )
+        // 反向断言: 不能使用 newSingleThreadExecutor 永不关闭
+        val leaks = Regex("newSingleThreadExecutor\\(\\)").findAll(loginScreen).count()
+        assertTrue("download executor must NOT be unbounded single-thread (leaks one per download)", leaks == 0)
+        // 线程必须 daemon — 退出不挂
+        assertTrue("executor threads must be daemon", loginScreen.contains("isDaemon = true"))
+    }
+
+    /** 审计#4: 同一下载必须只记录一次(元数据 + 字节合并到一条), 否则 4-downloads manifest 重复 / body 索引错位。 */
+    @Test
+    fun download_listener_records_one_entry_per_download() {
+        // setDownloadListener 回调体内 recordDownload 只允许调用一次 (6-arg 合并记录)
+        val cbStart = loginScreen.indexOf("setDownloadListener")
+        assertTrue(cbStart >= 0)
+        // 提取回调 lambda 到闭合大括号 (手工扫描平衡)
+        var depth = 0
+        var end = -1
+        for (i in loginScreen.indexOf('{', cbStart) until loginScreen.length) {
+            when (loginScreen[i]) {
+                '{' -> depth++
+                '}' -> { depth--; if (depth == 0) { end = i; break } }
+            }
+        }
+        assertTrue("setDownloadListener lambda must close", end > cbStart)
+        val cbBlock = loginScreen.substring(cbStart, end)
+        val cbRecordCount = Regex("recordDownload\\(").findAll(cbBlock).count()
+        assertTrue(
+            "setDownloadListener callback should record the download exactly once (not metadata+body twice)",
+            cbRecordCount == 1,
+        )
+    }
+
+    /** 审计#1: 快照 JS 返回的 raw 是双引号包裹的 JSON 字符串, writeNetworkLive 必须解包。 */
+    @Test
+    fun writeNetworkLive_unwraps_double_quoted_eval_result() {
+        // JwCaptureDump.kt: 必须尝试 JSONTokener(raw) 解开外层字符串
+        assertTrue(source.contains("JSONTokener") || source.contains("optJSONObject") && source.contains("JSONObject"))
+    }
 }

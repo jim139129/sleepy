@@ -478,6 +478,18 @@ fun JwWebViewLoginScreen(
     }
 }
 
+/** 下载实体抓取 — 共享有界池(daemon 线程), 避免每条下载泄漏一个核心线程。 */
+private val DOWNLOAD_FETCH_EXECUTOR =
+    java.util.concurrent.Executors.newFixedThreadPool(
+        2,
+        { r ->
+            java.lang.Thread(r, "sleepy-jw-download").apply {
+                isDaemon = true
+                priority = Thread.MIN_PRIORITY
+            }
+        },
+    )
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun JwWebView(
@@ -529,10 +541,11 @@ private fun JwWebView(
                 // 正常 WebView 配置
                 settings.databaseEnabled = true
                 setDownloadListener { downloadUrl, userAgent, contentDisposition, mimeType, contentLength ->
-                    JwDiagnosticSession.recordDownload(downloadUrl, userAgent, contentDisposition, mimeType, contentLength)
                     // 实体抓取 — 桌面 collector 4-downloads/ 对标: 下载文件字节落诊断包
                     // (导出 xls/ics 课表文件本身是协议证据)。后台线程 GET, 带 Cookie。
-                    java.util.concurrent.Executors.newSingleThreadExecutor().execute {
+                    // 单次记录: 元数据 + 字节合并到一条 (避免 manifest 重复/body 索引错位)。
+                    // 共享有界池 (daemon 线程), 不用 newSingleThreadExecutor — 那会每条下载泄漏一个核心线程。
+                    DOWNLOAD_FETCH_EXECUTOR.execute {
                         val body = runCatching {
                             val conn = java.net.URL(downloadUrl).openConnection() as java.net.HttpURLConnection
                             conn.connectTimeout = 10_000
@@ -546,11 +559,9 @@ private fun JwWebView(
                             if (conn.responseCode !in 200..299) null
                             else conn.inputStream.use { ins -> ins.readNBytes(2 * 1024 * 1024) }
                         }.getOrNull()
-                        if (body != null && body.isNotEmpty()) {
-                            JwDiagnosticSession.recordDownload(
-                                downloadUrl, userAgent, contentDisposition, mimeType, contentLength, body
-                            )
-                        }
+                        JwDiagnosticSession.recordDownload(
+                            downloadUrl, userAgent, contentDisposition, mimeType, contentLength, body
+                        )
                     }
                 }
                 webChromeClient = object : android.webkit.WebChromeClient() {

@@ -289,6 +289,39 @@ class JwCaptureDumpContentTest {
         assertTrue(zipNames(bytes).contains("4-net-replay-weeks/manifest.json"))
     }
 
+    /** 审计#2: 裸数组形态(exportJsNetwork 默认值)必须归一成 {live:[…]}, 不能静默清空。 */
+    @Test
+    fun buildZip_network_live_accepts_bare_array_shape() {
+        val runtime = """[{"url":"https://yjspy.xju.edu.cn/a","method":"GET","status":200,"responseHeaders":{"Content-Type":"text/plain"},"responseBody":"bodyA"}]"""
+        val bytes = JwCaptureDump.buildZip(
+            ctx = null, school = stubSchool(), result = stubResult(),
+            domInventoryJson = null, cookiesFull = null, storageJson = null,
+            linksJson = null, resourceReplayJson = null, networkLiveJson = runtime,
+        )
+        val names = zipNames(bytes)
+        assertTrue("bare-array live rows must be kept", names.contains("4-net-live/manifest.json"))
+        assertTrue("response body must be written", names.contains("4-net-live/1.body"))
+        val manifest = org.json.JSONArray(readEntry(bytes, "4-net-live/manifest.json"))
+        assertTrue(manifest.length() == 1)
+        assertTrue(readEntry(bytes, "4-net-live/1.body").contains("bodyA"))
+    }
+
+    /** 审计#1: 双引号包裹的 eval 结果(快照路径原样回传)必须解包后再解析。 */
+    @Test
+    fun buildZip_network_live_accepts_double_quoted_eval_result() {
+        // evaluateJavascript returns the stringified result *as a quoted JSON string literal*:
+        // e.g. input {"live":[…]} comes back as "{\"live\":[…]}" (leading + trailing quote).
+        val inner = """{"live":[{"url":"https://yjspy.xju.edu.cn/b","method":"GET","status":200,"responseBody":"bodyB"}]}"""
+        val runtime = "\"" + inner.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+        val bytes = JwCaptureDump.buildZip(
+            ctx = null, school = stubSchool(), result = stubResult(),
+            domInventoryJson = null, cookiesFull = null, storageJson = null,
+            linksJson = null, resourceReplayJson = null, networkLiveJson = runtime,
+        )
+        assertTrue(zipNames(bytes).contains("4-net-live/manifest.json"))
+        assertTrue(readEntry(bytes, "4-net-live/1.body").contains("bodyB"))
+    }
+
     private fun zipNames(bytes: ByteArray): Set<String> = buildSet {
         ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
             while (true) {

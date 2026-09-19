@@ -233,13 +233,35 @@ object JwCaptureDump {
         }
     }
 
+    /**
+     * 审计修复: runtime 网络数据有三种到达形态, 全部归一成 {live,replay,weeks} 对象 —
+     *  1. 双引号包裹的 eval 原样回传 (DIAGNOSTIC_NETWORK_SNAPSHOT_JS 快照路径:
+     *     evaluateJavascript 把 JS 返回值编码成 JSON 字符串字面量, 调用方没走 JSONTokener 解包)
+     *  2. 裸数组 (exportJsNetwork() 默认值是 JSONArray)
+     *  3. 正常对象 {live,replay,weeks}
+     * 解析失败 = 空对象兜底, 但绝不静默丢已捕获证据。
+     */
+    private fun parseNetworkLiveRoot(json: String?): org.json.JSONObject {
+        var raw = json?.takeIf { it.isNotBlank() } ?: return org.json.JSONObject()
+        // 形态1: 双引号包裹 → 解开外层字符串字面量
+        if (raw.startsWith("\"")) {
+            raw = runCatching { org.json.JSONTokener(raw).nextValue() as? String ?: raw }.getOrNull() ?: raw
+        }
+        // 形态2: 裸数组 → 归一为 {live: [...]}
+        if (raw.startsWith("[")) {
+            val arr = runCatching { org.json.JSONArray(raw) }.getOrNull()
+                ?: return org.json.JSONObject()
+            return org.json.JSONObject().put("live", arr)
+        }
+        return runCatching { org.json.JSONObject(raw) }.getOrNull() ?: org.json.JSONObject()
+    }
+
     private fun writeNetworkLive(
         zos: ZipOutputStream,
         manifest: MutableList<Pair<String, String>>,
         json: String?,
     ) {
-        val raw = json?.takeIf { it.isNotBlank() } ?: "{\"live\":[],\"replay\":[],\"weeks\":[]}"
-        val root = runCatching { org.json.JSONObject(raw) }.getOrNull() ?: org.json.JSONObject()
+        val root = parseNetworkLiveRoot(json)
         val rows = root.optJSONArray("live") ?: org.json.JSONArray()
         val replay = root.optJSONArray("replay") ?: org.json.JSONArray()
         val weeks = root.optJSONArray("weeks") ?: org.json.JSONArray()
