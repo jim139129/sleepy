@@ -88,6 +88,30 @@ class WidgetInfoXmlContractTest {
         }
     }
 
+    /** Provider descriptions must use the long localized text, not the short picker label. */
+    @Test
+    fun `every provider uses its localized widget description resource`() {
+        val expected = mapOf(
+            "today_widget_info" to "widget_today_description",
+            "today_small_widget_info" to "widget_today_small_description",
+            "today_wide_widget_info" to "widget_today_wide_description",
+            "twoday_widget_info" to "widget_twoday_description",
+            "twoday_small_widget_info" to "widget_twoday_small_description",
+            "twoday_wide_widget_info" to "widget_twoday_wide_description",
+            "week_list_widget_info" to "widget_week_list_description",
+            "week_list_small_widget_info" to "widget_week_list_small_description",
+            "weeklist_wide_widget_info" to "widget_week_list_wide_description",
+            "week_view_widget_info" to "widget_week_view_description",
+            "week_view_small_widget_info" to "widget_week_view_small_description",
+            "week_grid_widget_info" to "widget_week_grid_description",
+            "week_grid_small_widget_info" to "widget_week_grid_small_description"
+        )
+        expected.forEach { (xmlName, stringName) ->
+            val description = infoXmls.getValue(xmlName).getAttribute("android:description")
+            assertEquals("@string/$stringName", description)
+        }
+    }
+
     /** Widget picker / OEM detail text must be localized with every shipped locale. */
     @Test
     fun `all shipped locales define every widget description string`() {
