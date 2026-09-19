@@ -29,6 +29,13 @@
 | 小米 | [xiaomi.md](./xiaomi.md) |
 | 魅族 | [meizu.md](./meizu.md) |
 
+## Sleepy 代码侧支持边界（APK 内已完成）
+
+- **全部厂商**：同一套标准 Android AppWidget，13 个课表变体、2x2/4x2/4x4 三档尺寸、可调尺寸、预览图、无配置白屏、无数据引导页、深色主题资源和曝光/系统刷新后的标准重绘。
+- **vivo**：13 个 receiver 均声明原子组件三件套，继续走标准 AppWidget 渲染；原子组件平台审核和商店上架不由 APK 单方面完成。
+- **小米**：13 个 receiver 均声明 `miuiWidget` 曝光刷新字段并接收 `miui.appwidget.action.APPWIDGET_UPDATE`；初始布局使用 Xiaomi 兼容 background 根节点。独立进程和小米 Widget 商店审核暂不伪造，避免破坏 Room/渲染初始化。
+- **华为 / 荣耀 / OPPO / 魅族 / 三星**：没有可由 Android APK 单方面替代的公开负一屏私有卡片协议，使用标准 AppWidget 兼容路径；原生服务卡、商务白名单、UPK/主题生态或推荐位需另行平台准入。
+
 ## 缺口账本(本域)
 - 荣耀/OPPO: 商务准入的实际通过率、周期、量级门槛无公开数据,只能邮件实测。
 - OPPO: 《卡片接入指南》id=11981 实测"无权限查看"= 白名单实锤,需工单/商务开权限。

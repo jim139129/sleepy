@@ -90,8 +90,11 @@ open class TodayWidgetReceiver : AppWidgetProvider() {
      * 否则 onUpdate 等默认分发会被截断。
      */
     override fun onReceive(context: Context, intent: Intent) {
-        when (intent.action) {
-            ACTION_PREV_DAY, ACTION_NEXT_DAY, ACTION_RESET_DAY -> handleNav(context, intent)
+        when {
+            intent.action == WidgetVendorActions.XIAOMI_UPDATE_ACTION ->
+                WidgetVendorActions.dispatchXiaomiUpdate(this, context, intent)
+            intent.action in setOf(ACTION_PREV_DAY, ACTION_NEXT_DAY, ACTION_RESET_DAY) ->
+                handleNav(context, intent)
             else -> super.onReceive(context, intent)
         }
     }

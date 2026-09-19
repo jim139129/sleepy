@@ -127,6 +127,69 @@ class WidgetInfoXmlContractTest {
         }
     }
 
+    /** 小米负一屏/桌面识别需要 application 级版本号，且版本只能为正整数。 */
+    @Test
+    fun `application declares a positive Xiaomi widget version`() {
+        val application = manifest.getElementsByTagName("application").item(0) as Element
+        val metas = application.getElementsByTagName("meta-data")
+        var version: String? = null
+        for (i in 0 until metas.length) {
+            val meta = metas.item(i) as Element
+            if (meta.getAttribute("android:name") == "miuiWidgetVersion") {
+                version = meta.getAttribute("android:value")
+                break
+            }
+        }
+        assertTrue("application must declare a positive miuiWidgetVersion", version?.toIntOrNull()?.let { it > 0 } == true)
+    }
+
+    /** 每个 widget 都必须能被小米桌面以曝光刷新广播唤醒。 */
+    @Test
+    fun `every widget receiver declares Xiaomi widget metadata and refresh action`() {
+        manifestReceivers.keys.forEach { fqcn ->
+            val shortName = fqcn.substringAfterLast('.')
+            val receiver = (0 until manifest.getElementsByTagName("receiver").length)
+                .map { manifest.getElementsByTagName("receiver").item(it) as Element }
+                .first { it.getAttribute("android:name").substringAfterLast('.') == shortName }
+            val metas = receiver.getElementsByTagName("meta-data")
+            fun metadata(name: String): Element? {
+                for (i in 0 until metas.length) {
+                    val meta = metas.item(i) as Element
+                    if (meta.getAttribute("android:name") == name) return meta
+                }
+                return null
+            }
+            assertEquals("true", metadata("miuiWidget")?.getAttribute("android:value"))
+            assertEquals("exposure", metadata("miuiWidgetRefresh")?.getAttribute("android:value"))
+            val interval = metadata("miuiWidgetRefreshMinInterval")?.getAttribute("android:value")?.toLongOrNull()
+            assertTrue("$shortName Xiaomi exposure interval must be at least 10 seconds", interval != null && interval >= 10_000)
+
+            val actions = receiver.getElementsByTagName("action")
+            var hasXiaomiAction = false
+            for (i in 0 until actions.length) {
+                val action = actions.item(i) as Element
+                if (action.getAttribute("android:name") == "miui.appwidget.action.APPWIDGET_UPDATE") {
+                    hasXiaomiAction = true
+                    break
+                }
+            }
+            assertTrue("$shortName must receive miui.appwidget.action.APPWIDGET_UPDATE", hasXiaomiAction)
+        }
+    }
+
+    /** 小米要求初始根节点使用 background 系统 id，并填满 widget 容器。 */
+    @Test
+    fun `bitmap widget container has Xiaomi compatible root background`() {
+        val file = sequenceOf(
+            File("app/src/main/res/layout/widget_bitmap_container.xml"),
+            File("src/main/res/layout/widget_bitmap_container.xml")
+        ).first { it.isFile }
+        val root = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file).documentElement
+        assertEquals("@android:id/background", root.getAttribute("android:id"))
+        assertEquals("match_parent", root.getAttribute("android:layout_width"))
+        assertEquals("match_parent", root.getAttribute("android:layout_height"))
+    }
+
     /**
      * 添加组件时不得弹出强制配置页(白屏闪烁)。
      * 所有现有变体首屏已自动绑定默认课表,无内容可让用户在首次添加时填写;

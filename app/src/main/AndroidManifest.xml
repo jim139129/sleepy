@@ -38,6 +38,11 @@
         android:theme="@style/Theme.Sleepy"
         tools:targetApi="34">
 
+        <!-- Xiaomi AppVault / negative-one-screen widget compatibility. -->
+        <meta-data
+            android:name="miuiWidgetVersion"
+            android:value="1" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -115,6 +120,7 @@
             android:label="@string/widget_today_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="miui.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -122,6 +128,9 @@
             <meta-data android:name="vivo_widget" android:value="true" />
             <meta-data android:name="vivoWidgetVersion" android:value="1" />
             <meta-data android:name="vivo.widget.description" android:resource="@string/widget_today_description" />
+            <meta-data android:name="miuiWidget" android:value="true" />
+            <meta-data android:name="miuiWidgetRefresh" android:value="exposure" />
+            <meta-data android:name="miuiWidgetRefreshMinInterval" android:value="20000" />
         </receiver>
 
         <receiver
@@ -130,6 +139,7 @@
             android:label="@string/widget_today_small_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="miui.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -137,6 +147,9 @@
             <meta-data android:name="vivo_widget" android:value="true" />
             <meta-data android:name="vivoWidgetVersion" android:value="1" />
             <meta-data android:name="vivo.widget.description" android:resource="@string/widget_today_small_description" />
+            <meta-data android:name="miuiWidget" android:value="true" />
+            <meta-data android:name="miuiWidgetRefresh" android:value="exposure" />
+            <meta-data android:name="miuiWidgetRefreshMinInterval" android:value="20000" />
         </receiver>
 
         <receiver
@@ -145,6 +158,7 @@
             android:label="@string/widget_today_wide_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="miui.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -152,6 +166,9 @@
             <meta-data android:name="vivo_widget" android:value="true" />
             <meta-data android:name="vivoWidgetVersion" android:value="1" />
             <meta-data android:name="vivo.widget.description" android:resource="@string/widget_today_wide_description" />
+            <meta-data android:name="miuiWidget" android:value="true" />
+            <meta-data android:name="miuiWidgetRefresh" android:value="exposure" />
+            <meta-data android:name="miuiWidgetRefreshMinInterval" android:value="20000" />
         </receiver>
 
         <receiver
@@ -160,6 +177,7 @@
             android:label="@string/widget_twoday_wide_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="miui.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -167,6 +185,9 @@
             <meta-data android:name="vivo_widget" android:value="true" />
             <meta-data android:name="vivoWidgetVersion" android:value="1" />
             <meta-data android:name="vivo.widget.description" android:resource="@string/widget_twoday_wide_description" />
+            <meta-data android:name="miuiWidget" android:value="true" />
+            <meta-data android:name="miuiWidgetRefresh" android:value="exposure" />
+            <meta-data android:name="miuiWidgetRefreshMinInterval" android:value="20000" />
         </receiver>
 
         <receiver
@@ -175,6 +196,7 @@
             android:label="@string/widget_week_list_wide_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="miui.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -182,6 +204,9 @@
             <meta-data android:name="vivo_widget" android:value="true" />
             <meta-data android:name="vivoWidgetVersion" android:value="1" />
             <meta-data android:name="vivo.widget.description" android:resource="@string/widget_week_list_wide_description" />
+            <meta-data android:name="miuiWidget" android:value="true" />
+            <meta-data android:name="miuiWidgetRefresh" android:value="exposure" />
+            <meta-data android:name="miuiWidgetRefreshMinInterval" android:value="20000" />
         </receiver>
 
         <receiver
@@ -190,6 +215,7 @@
             android:label="@string/widget_week_list_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="miui.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -197,6 +223,9 @@
             <meta-data android:name="vivo_widget" android:value="true" />
             <meta-data android:name="vivoWidgetVersion" android:value="1" />
             <meta-data android:name="vivo.widget.description" android:resource="@string/widget_week_list_description" />
+            <meta-data android:name="miuiWidget" android:value="true" />
+            <meta-data android:name="miuiWidgetRefresh" android:value="exposure" />
+            <meta-data android:name="miuiWidgetRefreshMinInterval" android:value="20000" />
         </receiver>
 
         <receiver
@@ -205,6 +234,7 @@
             android:label="@string/widget_week_list_small_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="miui.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -212,6 +242,9 @@
             <meta-data android:name="vivo_widget" android:value="true" />
             <meta-data android:name="vivoWidgetVersion" android:value="1" />
             <meta-data android:name="vivo.widget.description" android:resource="@string/widget_week_list_small_description" />
+            <meta-data android:name="miuiWidget" android:value="true" />
+            <meta-data android:name="miuiWidgetRefresh" android:value="exposure" />
+            <meta-data android:name="miuiWidgetRefreshMinInterval" android:value="20000" />
         </receiver>
 
         <receiver
@@ -220,6 +253,7 @@
             android:label="@string/widget_week_view_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="miui.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -227,6 +261,9 @@
             <meta-data android:name="vivo_widget" android:value="true" />
             <meta-data android:name="vivoWidgetVersion" android:value="1" />
             <meta-data android:name="vivo.widget.description" android:resource="@string/widget_week_view_description" />
+            <meta-data android:name="miuiWidget" android:value="true" />
+            <meta-data android:name="miuiWidgetRefresh" android:value="exposure" />
+            <meta-data android:name="miuiWidgetRefreshMinInterval" android:value="20000" />
         </receiver>
 
         <receiver
@@ -235,6 +272,7 @@
             android:label="@string/widget_week_view_small_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="miui.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -242,6 +280,9 @@
             <meta-data android:name="vivo_widget" android:value="true" />
             <meta-data android:name="vivoWidgetVersion" android:value="1" />
             <meta-data android:name="vivo.widget.description" android:resource="@string/widget_week_view_small_description" />
+            <meta-data android:name="miuiWidget" android:value="true" />
+            <meta-data android:name="miuiWidgetRefresh" android:value="exposure" />
+            <meta-data android:name="miuiWidgetRefreshMinInterval" android:value="20000" />
         </receiver>
 
         <receiver
@@ -250,6 +291,7 @@
             android:label="@string/widget_week_grid_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="miui.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -257,6 +299,9 @@
             <meta-data android:name="vivo_widget" android:value="true" />
             <meta-data android:name="vivoWidgetVersion" android:value="1" />
             <meta-data android:name="vivo.widget.description" android:resource="@string/widget_week_grid_description" />
+            <meta-data android:name="miuiWidget" android:value="true" />
+            <meta-data android:name="miuiWidgetRefresh" android:value="exposure" />
+            <meta-data android:name="miuiWidgetRefreshMinInterval" android:value="20000" />
         </receiver>
 
         <receiver
@@ -265,6 +310,7 @@
             android:label="@string/widget_week_grid_small_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="miui.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -272,6 +318,9 @@
             <meta-data android:name="vivo_widget" android:value="true" />
             <meta-data android:name="vivoWidgetVersion" android:value="1" />
             <meta-data android:name="vivo.widget.description" android:resource="@string/widget_week_grid_small_description" />
+            <meta-data android:name="miuiWidget" android:value="true" />
+            <meta-data android:name="miuiWidgetRefresh" android:value="exposure" />
+            <meta-data android:name="miuiWidgetRefreshMinInterval" android:value="20000" />
         </receiver>
 
         <receiver
@@ -280,6 +329,7 @@
             android:label="@string/widget_twoday_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="miui.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -287,6 +337,9 @@
             <meta-data android:name="vivo_widget" android:value="true" />
             <meta-data android:name="vivoWidgetVersion" android:value="1" />
             <meta-data android:name="vivo.widget.description" android:resource="@string/widget_twoday_description" />
+            <meta-data android:name="miuiWidget" android:value="true" />
+            <meta-data android:name="miuiWidgetRefresh" android:value="exposure" />
+            <meta-data android:name="miuiWidgetRefreshMinInterval" android:value="20000" />
         </receiver>
 
         <receiver
@@ -295,6 +348,7 @@
             android:label="@string/widget_twoday_small_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="miui.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -302,6 +356,9 @@
             <meta-data android:name="vivo_widget" android:value="true" />
             <meta-data android:name="vivoWidgetVersion" android:value="1" />
             <meta-data android:name="vivo.widget.description" android:resource="@string/widget_twoday_small_description" />
+            <meta-data android:name="miuiWidget" android:value="true" />
+            <meta-data android:name="miuiWidgetRefresh" android:value="exposure" />
+            <meta-data android:name="miuiWidgetRefreshMinInterval" android:value="20000" />
         </receiver>
 
         <!-- Daily boot receiver: reschedule notifications -->
