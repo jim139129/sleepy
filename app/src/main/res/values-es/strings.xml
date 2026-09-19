@@ -7,7 +7,24 @@
     <string name="widget_week_list_label">Esta semana (lista)</string>
     <string name="widget_week_grid_label">Esta semana (cuadrícula)</string>
     <string name="widget_twoday_label">Próximos dos días</string>
+    <string name="widget_twoday_small_label">Próximos dos días · Pequeño</string>
     <string name="widget_week_view_label">Esta semana (vista)</string>
+    <string name="widget_week_view_small_label">Esta semana (vista) · Pequeño</string>
+
+    <!-- Widget picker descriptions (also used as vivo atomic-component detail text). -->
+    <string name="widget_today_description">Clases de hoy</string>
+    <string name="widget_today_small_description">Clases de hoy en una tarjeta compacta</string>
+    <string name="widget_today_wide_description">Clases de hoy en una tarjeta ancha</string>
+    <string name="widget_twoday_description">Clases de los próximos dos días</string>
+    <string name="widget_twoday_small_description">Próximos dos días en una tarjeta compacta</string>
+    <string name="widget_twoday_wide_description">Próximos dos días en una tarjeta ancha</string>
+    <string name="widget_week_list_description">Clases de esta semana en una lista</string>
+    <string name="widget_week_list_small_description">Clases de esta semana en una lista compacta</string>
+    <string name="widget_week_list_wide_description">Clases de esta semana en una lista ancha</string>
+    <string name="widget_week_view_description">Clases de esta semana en vista semanal</string>
+    <string name="widget_week_view_small_description">Clases de esta semana en vista semanal compacta</string>
+    <string name="widget_week_grid_description">Clases de esta semana en cuadrícula</string>
+    <string name="widget_week_grid_small_description">Clases de esta semana en cuadrícula compacta</string>
 
     <string name="tab_schedule">Horario</string>
     <string name="tab_today">Hoy</string>

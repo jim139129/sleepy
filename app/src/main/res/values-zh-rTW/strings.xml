@@ -7,7 +7,24 @@
     <string name="widget_week_list_label">本週課表（列表）</string>
     <string name="widget_week_grid_label">本週課表（網格）</string>
     <string name="widget_twoday_label">最近兩天</string>
+    <string name="widget_twoday_small_label">最近兩天 · 小</string>
     <string name="widget_week_view_label">本週課表（週檢視）</string>
+    <string name="widget_week_view_small_label">本週課表（週檢視）· 小</string>
+
+    <!-- Widget picker descriptions (also used as vivo atomic-component detail text). -->
+    <string name="widget_today_description">顯示今天的課程安排</string>
+    <string name="widget_today_small_description">以緊湊卡片顯示今天的課程</string>
+    <string name="widget_today_wide_description">以寬卡片顯示今天的課程</string>
+    <string name="widget_twoday_description">顯示最近兩天的課程</string>
+    <string name="widget_twoday_small_description">以緊湊卡片顯示最近兩天課程</string>
+    <string name="widget_twoday_wide_description">以寬卡片顯示最近兩天課程</string>
+    <string name="widget_week_list_description">以列表顯示本週課程</string>
+    <string name="widget_week_list_small_description">以緊湊列表顯示本週課程</string>
+    <string name="widget_week_list_wide_description">以寬列表顯示本週課程</string>
+    <string name="widget_week_view_description">按週檢視顯示課程安排</string>
+    <string name="widget_week_view_small_description">以緊湊週檢視顯示課程</string>
+    <string name="widget_week_grid_description">按網格顯示本週課程</string>
+    <string name="widget_week_grid_small_description">以緊湊網格顯示本週課程</string>
 
     <string name="tab_schedule">課表</string>
     <string name="tab_today">今日</string>

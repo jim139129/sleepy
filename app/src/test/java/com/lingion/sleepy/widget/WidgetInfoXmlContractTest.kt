@@ -88,6 +88,39 @@ class WidgetInfoXmlContractTest {
         }
     }
 
+    /** Widget picker / OEM detail text must be localized with every shipped locale. */
+    @Test
+    fun `all shipped locales define every widget description string`() {
+        val required = listOf(
+            "widget_today_description",
+            "widget_today_small_description",
+            "widget_today_wide_description",
+            "widget_twoday_description",
+            "widget_twoday_small_description",
+            "widget_twoday_wide_description",
+            "widget_week_list_description",
+            "widget_week_list_small_description",
+            "widget_week_list_wide_description",
+            "widget_week_view_description",
+            "widget_week_view_small_description",
+            "widget_week_grid_description",
+            "widget_week_grid_small_description"
+        )
+        val resRoot = resXmlDir.parentFile
+            ?: error("res/xml must have a parent resource directory")
+        val localeDirs = resRoot.listFiles { file ->
+            file.isDirectory && (file.name == "values" || file.name.startsWith("values-"))
+        } ?: emptyArray()
+        localeDirs.forEach { dir ->
+            val strings = File(dir, "strings.xml")
+            if (!strings.isFile) return@forEach
+            val source = strings.readText()
+            required.forEach { key ->
+                assertTrue("${dir.name}/strings.xml must define $key", Regex("name=\\\"$key\\\"").containsMatchIn(source))
+            }
+        }
+    }
+
     /** vivo 原子组件要求每个 receiver 都声明三件套，供智慧桌面识别和展示。 */
     @Test
     fun `every widget receiver declares vivo atomic component metadata`() {
