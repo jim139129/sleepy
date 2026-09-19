@@ -124,13 +124,16 @@ Sleepy 的适配原则：**一套 widget、一份 Android AppWidget 公共层代
 | Pin 入口覆盖全部变体（含历史 adb key 兼容） | 全厂商（HyperOS 无审核时不弹商店走标准 pin） | `PinWidgetRouting.resolveClass` 派生自 `ALL_WIDGET_VARIANTS`，未知/null 回落 WeekGrid | `PinWidgetRoutingTest` |
 | 清数据/无数据 → 默认视图 | 小米 tech-spec §9（清数据广播时机） | 渲染器 `hasTable=false` 画 `widget_create_schedule` 引导页，不崩溃不空白 | `WidgetBitmapLifecycleTest` / 各渲染单测 |
 | RemoteViews bitmap 上限（≤1.5× 屏幕） | vivo painpoints（Binder 传输上限实测） | 渲染按 `computeSizeDp` 真实 dp 画，条带 48dp 横切；长图高度=内容高度非屏幕整数倍叠加 | `WidgetBitmapLifecycleTest` |
-| 曝光刷新声明 `miuiWidget*` + `miui.appwidget.action.APPWIDGET_UPDATE` | 小米 tech-spec §2 | **暂不落地** — HyperOS「去掉定时刷新」前提是接入小米 Widget 审核（`requestPinAppWidget(addType=appWidgetDetail)` 走商店详情页）；Sleepy 未上架小米商店，未审核状态下 meta-data 无效。走标准 Android 路径（WorkManager 15min 兜底）在小米上行为正确 | — |
-| `:widgetProvider` 独立进程 ≤35M、禁 fork | 小米 tech-spec §1 | **不做** — 独立进程会隔离 `SleepyApp.repository`（receiver 渲染链直读 Room），需要架构级拆分；且该规范是小米商店上架审核项，非公共层正确性问题 | — |
-| vivo 原子组件 meta-data / 华为服务卡片 | vivo / HarmonyOS | **平台层，不做伪装** — 必须接 vivo 原子组件 SDK + 平台审核；HarmonyOS 卡片是独立生态（见上） | — |
+| 曝光刷新声明 `miuiWidget*` + `miui.appwidget.action.APPWIDGET_UPDATE` | 小米 tech-spec §2 | **代码侧已声明**：application 级 `miuiWidgetVersion=1`；每个 receiver 增 `miuiWidget=true` / `miuiWidgetRefresh=exposure` / `miuiWidgetRefreshMinInterval=20s` / `miui.appwidget.action.APPWIDGET_UPDATE` action；`WidgetVendorActions.dispatchXiaomiUpdate` 把曝光广播转回标准 `onUpdate`，不引入第二套渲染管线。未上架小米商店时 HyperOS 走标准 Android widget 路径（WorkManager 15min 兜底），这些元数据被系统读取但不影响 widget 行为；上架后无需重新声明 | `WidgetInfoXmlContractTest::every widget receiver declares Xiaomi widget metadata and refresh action` + `WidgetInfoXmlContractTest::application declares a positive Xiaomi widget version` + `WidgetVendorActionsTest` |
+| 初始布局根节点 `@android:id/background` + 非透明背景 | 小米 tech-spec §1 | **代码侧已落地**：`widget_bitmap_container.xml` 根改为 `@android:id/background` 的 `FrameLayout` + `splash_background` 兜底色 | `WidgetInfoXmlContractTest::bitmap widget container has Xiaomi compatible root background` |
+| `:widgetProvider` 独立进程 ≤35M、禁 fork | 小米 tech-spec §1 | **不做** — 独立进程会隔离 `SleepyApp.repository`（receiver 渲染链直读 Room），需要架构级拆分；且该规范是小米商店上架审核项，非公共层正确性问题；当前 receiver 渲染在主进程内，`miuiWidget=true` 仍能被识别 | — |
+| vivo 原子组件 meta-data / 华为服务卡片 | vivo / HarmonyOS | **平台层，不做伪装** — 必须接 vivo 原子组件 SDK + 平台审核；HarmonyOS 卡片是独立生态（见上）。vivo 三件套（`vivo_widget=true` / `vivoWidgetVersion` / `vivo.widget.description`）已在上一轮（commit `24ed1077`）落地 | `WidgetInfoXmlContractTest::every widget receiver declares vivo atomic component metadata` |
 
-> 小米曝光刷新与独立进程是「上架小米 Widget 商店」的审核要求。Sleepy 当前分发渠道是
-> GitHub/Gitee APK 侧载，不经商店审核，未声明这两项在小米上等价于标准 Android widget
-> 行为（系统定时刷新被去后由 WorkManager 兜底）— 若未来上架小米商店再按 tech-spec §1/§2 补。
+> 小米曝光刷新声明属「代码侧可单方面完成」的能力：meta-data 与 action 写入 manifest 后，
+> 在未上架状态下 HyperOS 读取但走标准 widget 路径，行为与纯原生 AppWidget 等价；上架后
+> 这些声明立即生效，无需改代码。独立进程 `:widgetProvider` 是商店上架审核项且涉及
+> `SleepyApp.repository` 进程隔离，属架构级拆分，单加 manifest 属性会造成 Room 直读链
+> 断裂，故不声明。
 
 ## 配套使用
 

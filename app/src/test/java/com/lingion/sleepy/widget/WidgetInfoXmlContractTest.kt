@@ -88,6 +88,76 @@ class WidgetInfoXmlContractTest {
         }
     }
 
+    /** Provider descriptions must use the long localized text, not the short picker label. */
+    @Test
+    fun `every provider uses its localized widget description resource`() {
+        val expected = mapOf(
+            "today_widget_info" to "widget_today_description",
+            "today_small_widget_info" to "widget_today_small_description",
+            "today_wide_widget_info" to "widget_today_wide_description",
+            "twoday_widget_info" to "widget_twoday_description",
+            "twoday_small_widget_info" to "widget_twoday_small_description",
+            "twoday_wide_widget_info" to "widget_twoday_wide_description",
+            "week_list_widget_info" to "widget_week_list_description",
+            "week_list_small_widget_info" to "widget_week_list_small_description",
+            "weeklist_wide_widget_info" to "widget_week_list_wide_description",
+            "week_view_widget_info" to "widget_week_view_description",
+            "week_view_small_widget_info" to "widget_week_view_small_description",
+            "week_grid_widget_info" to "widget_week_grid_description",
+            "week_grid_small_widget_info" to "widget_week_grid_small_description"
+        )
+        expected.forEach { (xmlName, stringName) ->
+            val description = infoXmls.getValue(xmlName).getAttribute("android:description")
+            assertEquals("@string/$stringName", description)
+        }
+    }
+
+    /** Widget picker / OEM text must be localized with every shipped locale. */
+    @Test
+    fun `all shipped locales define every widget label and description string`() {
+        val required = listOf(
+            "widget_today_label",
+            "widget_today_small_label",
+            "widget_today_wide_label",
+            "widget_twoday_label",
+            "widget_twoday_small_label",
+            "widget_twoday_wide_label",
+            "widget_week_list_label",
+            "widget_week_list_small_label",
+            "widget_week_list_wide_label",
+            "widget_week_view_label",
+            "widget_week_view_small_label",
+            "widget_week_grid_label",
+            "widget_week_grid_small_label",
+            "widget_today_description",
+            "widget_today_small_description",
+            "widget_today_wide_description",
+            "widget_twoday_description",
+            "widget_twoday_small_description",
+            "widget_twoday_wide_description",
+            "widget_week_list_description",
+            "widget_week_list_small_description",
+            "widget_week_list_wide_description",
+            "widget_week_view_description",
+            "widget_week_view_small_description",
+            "widget_week_grid_description",
+            "widget_week_grid_small_description"
+        )
+        val resRoot = resXmlDir.parentFile
+            ?: error("res/xml must have a parent resource directory")
+        val localeDirs = resRoot.listFiles { file ->
+            file.isDirectory && (file.name == "values" || file.name.startsWith("values-"))
+        } ?: emptyArray()
+        localeDirs.forEach { dir ->
+            val strings = File(dir, "strings.xml")
+            if (!strings.isFile) return@forEach
+            val source = strings.readText()
+            required.forEach { key ->
+                assertTrue("${dir.name}/strings.xml must define $key", Regex("name=\\\"$key\\\"").containsMatchIn(source))
+            }
+        }
+    }
+
     /** vivo 原子组件要求每个 receiver 都声明三件套，供智慧桌面识别和展示。 */
     @Test
     fun `every widget receiver declares vivo atomic component metadata`() {
@@ -127,6 +197,69 @@ class WidgetInfoXmlContractTest {
         }
     }
 
+    /** 小米负一屏/桌面识别需要 application 级版本号，且版本只能为正整数。 */
+    @Test
+    fun `application declares a positive Xiaomi widget version`() {
+        val application = manifest.getElementsByTagName("application").item(0) as Element
+        val metas = application.getElementsByTagName("meta-data")
+        var version: String? = null
+        for (i in 0 until metas.length) {
+            val meta = metas.item(i) as Element
+            if (meta.getAttribute("android:name") == "miuiWidgetVersion") {
+                version = meta.getAttribute("android:value")
+                break
+            }
+        }
+        assertTrue("application must declare a positive miuiWidgetVersion", version?.toIntOrNull()?.let { it > 0 } == true)
+    }
+
+    /** 每个 widget 都必须能被小米桌面以曝光刷新广播唤醒。 */
+    @Test
+    fun `every widget receiver declares Xiaomi widget metadata and refresh action`() {
+        manifestReceivers.keys.forEach { fqcn ->
+            val shortName = fqcn.substringAfterLast('.')
+            val receiver = (0 until manifest.getElementsByTagName("receiver").length)
+                .map { manifest.getElementsByTagName("receiver").item(it) as Element }
+                .first { it.getAttribute("android:name").substringAfterLast('.') == shortName }
+            val metas = receiver.getElementsByTagName("meta-data")
+            fun metadata(name: String): Element? {
+                for (i in 0 until metas.length) {
+                    val meta = metas.item(i) as Element
+                    if (meta.getAttribute("android:name") == name) return meta
+                }
+                return null
+            }
+            assertEquals("true", metadata("miuiWidget")?.getAttribute("android:value"))
+            assertEquals("exposure", metadata("miuiWidgetRefresh")?.getAttribute("android:value"))
+            val interval = metadata("miuiWidgetRefreshMinInterval")?.getAttribute("android:value")?.toLongOrNull()
+            assertTrue("$shortName Xiaomi exposure interval must be at least 10 seconds", interval != null && interval >= 10_000)
+
+            val actions = receiver.getElementsByTagName("action")
+            var hasXiaomiAction = false
+            for (i in 0 until actions.length) {
+                val action = actions.item(i) as Element
+                if (action.getAttribute("android:name") == "miui.appwidget.action.APPWIDGET_UPDATE") {
+                    hasXiaomiAction = true
+                    break
+                }
+            }
+            assertTrue("$shortName must receive miui.appwidget.action.APPWIDGET_UPDATE", hasXiaomiAction)
+        }
+    }
+
+    /** 小米要求初始根节点使用 background 系统 id，并填满 widget 容器。 */
+    @Test
+    fun `bitmap widget container has Xiaomi compatible root background`() {
+        val file = sequenceOf(
+            File("app/src/main/res/layout/widget_bitmap_container.xml"),
+            File("src/main/res/layout/widget_bitmap_container.xml")
+        ).first { it.isFile }
+        val root = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file).documentElement
+        assertEquals("@android:id/background", root.getAttribute("android:id"))
+        assertEquals("match_parent", root.getAttribute("android:layout_width"))
+        assertEquals("match_parent", root.getAttribute("android:layout_height"))
+    }
+
     /**
      * 添加组件时不得弹出强制配置页(白屏闪烁)。
      * 所有现有变体首屏已自动绑定默认课表,无内容可让用户在首次添加时填写;
@@ -154,6 +287,27 @@ class WidgetInfoXmlContractTest {
             assertTrue(
                 "$name must declare android:widgetFeatures containing reconfigurable, got \"$features\"",
                 features.split('|', ',', ' ').contains("reconfigurable")
+            )
+        }
+    }
+
+    /**
+     * 锁屏(负一屏/keyguard)类别: 全部变体声明 home_screen|keyguard。
+     * 用户 2026-09-19 明示指令: 锁屏小组件直接做, 课程信息是否上锁屏由用户自己选。
+     * Android 12+ 的锁屏承载由系统/Launcher 决定, keyguard 类别是可被识别的前提。
+     */
+    @Test
+    fun `every info xml declares home_screen and keyguard categories`() {
+        infoXmls.forEach { (name, root) ->
+            val category = root.getAttribute("android:widgetCategory")
+            val parts = category.split('|', ',', ' ').filter { it.isNotBlank() }
+            assertTrue(
+                "$name must declare android:widgetCategory containing home_screen, got \"$category\"",
+                parts.contains("home_screen")
+            )
+            assertTrue(
+                "$name must declare android:widgetCategory containing keyguard, got \"$category\"",
+                parts.contains("keyguard")
             )
         }
     }

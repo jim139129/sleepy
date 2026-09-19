@@ -13,6 +13,6 @@
     android:previewLayout="@layout/widget_bitmap_container"
     android:previewImage="@drawable/widget_preview_weeklist_wide"
     android:resizeMode="horizontal|vertical"
-    android:widgetCategory="home_screen"
-    android:description="@string/widget_week_list_wide_label"
+    android:widgetCategory="home_screen|keyguard"
+    android:description="@string/widget_week_list_wide_description"
     android:widgetFeatures="reconfigurable" />

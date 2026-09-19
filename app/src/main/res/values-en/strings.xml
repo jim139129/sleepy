@@ -14,6 +14,21 @@
     <string name="widget_week_view_label">This Week (View)</string>
     <string name="widget_week_view_small_label">This Week (View) · Small</string>
 
+    <!-- Widget picker descriptions (also serves as the vivo atomic-component detail text). -->
+    <string name="widget_today_description">Today\'s classes</string>
+    <string name="widget_today_small_description">Today\'s classes in a compact card</string>
+    <string name="widget_today_wide_description">Today\'s classes in a wide card</string>
+    <string name="widget_twoday_description">Classes for the next two days</string>
+    <string name="widget_twoday_small_description">Next two days in a compact card</string>
+    <string name="widget_twoday_wide_description">Next two days in a wide card</string>
+    <string name="widget_week_list_description">This week\'s classes in a list</string>
+    <string name="widget_week_list_small_description">This week\'s classes in a compact list</string>
+    <string name="widget_week_list_wide_description">This week\'s classes in a wide list</string>
+    <string name="widget_week_view_description">This week\'s classes in a week view</string>
+    <string name="widget_week_view_small_description">This week\'s classes in a compact week view</string>
+    <string name="widget_week_grid_description">This week\'s classes in a grid</string>
+    <string name="widget_week_grid_small_description">This week\'s classes in a compact grid</string>
+
     <string name="tab_schedule">Schedule</string>
     <string name="tab_today">Today</string>
     <string name="tab_mine">Me</string>

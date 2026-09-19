@@ -1,6 +1,6 @@
-# 负一屏 (Minus-One Screen) 六厂商接入门槛速查
+# 负一屏 (Minus-One Screen) 全球厂商接入门槛速查
 
-> 目录目的: 只回答一件事 —— **第三方 app 怎样才能把内容放上各家负一屏**。接入路径 / 载体形态 / 审核门槛 / 商务条件 / 自助程度。
+> 目录目的: 只回答一件事 —— **第三方 app 怎样才能把内容放上各家负一屏**。接入路径 / 载体形态 / 审核门槛 / 商务条件 / 自助程度。全球没有公开私有协议的厂商统一走标准 Android AppWidget；完整全球矩阵见 [global-vendor-matrix.md](./global-vendor-matrix.md)。
 > 抓取时间: 2026-09-17 (3 research agent 并行实测官方开发者平台: 华为+荣耀 / OPPO+vivo / 小米+魅族)
 > 抓取原则: 厂商官方页优先(JS 渲染站实测读正文)→ 社区二次核实;每文件首行标注证据等级;查无公开资料的显式记录,不编造 URL。
 > 相邻域(内容互不重复): [长按菜单](../long-press-menu/INDEX.md) · [桌面形态与变形](../desktop-morph/INDEX.md) · [设计规范](../oem-design-specs/INDEX.md) · [开源与社区](../oem-open-source/INDEX.md) · [实时信息卡片](../live-cards/INDEX.md) · [AppWidget 启动器兼容](../widget-vendor-specs/INDEX.md)
@@ -28,6 +28,13 @@
 | vivo | [vivo.md](./vivo.md) |
 | 小米 | [xiaomi.md](./xiaomi.md) |
 | 魅族 | [meizu.md](./meizu.md) |
+
+## Sleepy 代码侧支持边界（APK 内已完成）
+
+- **全部厂商**：同一套标准 Android AppWidget，13 个课表变体、2x2/4x2/4x4 三档尺寸、可调尺寸、预览图、无配置白屏、无数据引导页、深色主题资源和曝光/系统刷新后的标准重绘。
+- **vivo**：13 个 receiver 均声明原子组件三件套，继续走标准 AppWidget 渲染；原子组件平台审核和商店上架不由 APK 单方面完成。
+- **小米**：13 个 receiver 均声明 `miuiWidget` 曝光刷新字段并接收 `miui.appwidget.action.APPWIDGET_UPDATE`；初始布局使用 Xiaomi 兼容 background 根节点。独立进程和小米 Widget 商店审核暂不伪造，避免破坏 Room/渲染初始化。
+- **华为 / 荣耀 / OPPO / 魅族 / 三星**：没有可由 Android APK 单方面替代的公开负一屏私有卡片协议，使用标准 AppWidget 兼容路径；原生服务卡、商务白名单、UPK/主题生态或推荐位需另行平台准入。
 
 ## 缺口账本(本域)
 - 荣耀/OPPO: 商务准入的实际通过率、周期、量级门槛无公开数据,只能邮件实测。

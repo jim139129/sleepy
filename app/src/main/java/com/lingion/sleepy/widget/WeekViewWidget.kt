@@ -3,6 +3,7 @@ package com.lingion.sleepy.widget
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import com.lingion.sleepy.R
@@ -110,6 +111,14 @@ open class WeekViewWidgetReceiver : AppWidgetProvider() {
                 scopeExtra = ScrollStripService.StripFactory.SCOPE_WEEKVIEW,
                 pushGen = gen
             )
+        }
+    }
+
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == WidgetVendorActions.XIAOMI_UPDATE_ACTION) {
+            WidgetVendorActions.dispatchXiaomiUpdate(this, context, intent)
+        } else {
+            super.onReceive(context, intent)
         }
     }
 

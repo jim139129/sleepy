@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -52,6 +53,14 @@ open class WeekGridWidgetProvider : AppWidgetProvider() {
      * 改用 goAsync() 获取 PendingResult, 在后台线程做完 DB 加载 + Bitmap 渲染后 finish。
      * 系统广播 ANR 阈值(前台~10s/后台~60s)由 goAsync 续命, 实际工作在 Dispatchers.Default。
      */
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == WidgetVendorActions.XIAOMI_UPDATE_ACTION) {
+            WidgetVendorActions.dispatchXiaomiUpdate(this, context, intent)
+        } else {
+            super.onReceive(context, intent)
+        }
+    }
+
     override fun onUpdate(context: Context, awm: AppWidgetManager, ids: IntArray) {
         val pending = goAsync()
         ioScope.launch {

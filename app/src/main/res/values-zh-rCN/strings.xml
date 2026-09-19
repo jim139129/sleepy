@@ -7,7 +7,27 @@
     <string name="widget_week_list_label">本周课表（列表）</string>
     <string name="widget_week_grid_label">本周课表（网格）</string>
     <string name="widget_twoday_label">最近两天</string>
+    <string name="widget_twoday_small_label">最近两天 · 小</string>
     <string name="widget_week_view_label">本周课表（周视图）</string>
+    <string name="widget_week_view_small_label">本周课表（周视图）· 小</string>
+    <string name="widget_today_small_label">今日课程 · 小</string>
+    <string name="widget_week_grid_small_label">本周课表（网格）· 小</string>
+    <string name="widget_week_list_small_label">本周课表（列表）· 小</string>
+
+    <!-- Widget picker descriptions (also used as vivo atomic-component detail text). -->
+    <string name="widget_today_description">显示今天的课程安排</string>
+    <string name="widget_today_small_description">以紧凑卡片显示今天的课程</string>
+    <string name="widget_today_wide_description">以宽卡片显示今天的课程</string>
+    <string name="widget_twoday_description">显示最近两天的课程</string>
+    <string name="widget_twoday_small_description">以紧凑卡片显示最近两天课程</string>
+    <string name="widget_twoday_wide_description">以宽卡片显示最近两天课程</string>
+    <string name="widget_week_list_description">以列表显示本周课程</string>
+    <string name="widget_week_list_small_description">以紧凑列表显示本周课程</string>
+    <string name="widget_week_list_wide_description">以宽列表显示本周课程</string>
+    <string name="widget_week_view_description">按周视图显示课程安排</string>
+    <string name="widget_week_view_small_description">以紧凑周视图显示课程</string>
+    <string name="widget_week_grid_description">按网格显示本周课程</string>
+    <string name="widget_week_grid_small_description">以紧凑网格显示本周课程</string>
 
     <!-- Tabs -->
     <string name="tab_schedule">课表</string>
