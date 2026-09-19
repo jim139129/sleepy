@@ -309,6 +309,14 @@ fun JwWebViewLoginScreen(
                         evaluateFetchWithTimeout(wv, NEU_FETCH_JS)
                         return@CaptureBar
                     }
+                    if (school.type == JwProtocol.TYPE_NUIT) {
+                        evaluateFetchWithTimeout(wv, NUIT_FETCH_JS)
+                        return@CaptureBar
+                    }
+                    if (school.type == JwProtocol.TYPE_KUST) {
+                        evaluateFetchWithTimeout(wv, KUST_FETCH_JS)
+                        return@CaptureBar
+                    }
                     // SWJTU YETHAN 逐专平台：CAS 登录后从 localStorage 取 ytoken，
                     // 同源 GET 课表 JSON；不发送采集包中的真实 token。
                     if (school.type == JwProtocol.TYPE_YETHAN) {
@@ -716,6 +724,36 @@ private const val WISEDU_FETCH_JS = """
  * 课表页面没有可供 HTML parser 使用的课程数据。登录态下依次取得当前学期、可用校区，
  * 再向 getMyScheduleDetail.do 提交表单；返回的 datas.arrangedList 由 JwNeuParser 解析。
  */
+private const val NUIT_FETCH_JS = """
+(function(){
+  fetch('/jwapp/sys/homeapp/api/home/currentUser.do',{credentials:'include'})
+    .then(function(r){return r.json();})
+    .then(function(u){
+      var term=u&&u.datas&&u.datas.welcomeInfo&&u.datas.welcomeInfo.xnxqdm;
+      if(!term) throw new Error('无法识别当前学期');
+      return fetch('/jwapp/sys/homeapp/api/home/student/courses.do?termCode='+encodeURIComponent(term),{credentials:'include'});
+    })
+    .then(function(r){return r.text();})
+    .then(function(data){window.__sleepyBridge.onWiseduResult(JSON.stringify({ok:true,data:data}));})
+    .catch(function(e){window.__sleepyBridge.onWiseduResult(JSON.stringify({ok:false,err:String(e)}));});
+})();
+"""
+
+private const val KUST_FETCH_JS = """
+(function(){
+  fetch('/api/uppcard/kbsz/queryAllTerm',{credentials:'include'})
+    .then(function(r){return r.json();})
+    .then(function(terms){
+      var list=terms&&terms.data||[]; var term=list[0]&&list[0].XNXQ;
+      if(!term) throw new Error('无法识别昆明理工学期');
+      return fetch('/api/uppcard/kbsz/queryAWeekSchedule?XNXQ='+encodeURIComponent(term),{credentials:'include'});
+    })
+    .then(function(r){return r.text();})
+    .then(function(data){window.__sleepyBridge.onWiseduResult(JSON.stringify({ok:true,data:data}));})
+    .catch(function(e){window.__sleepyBridge.onWiseduResult(JSON.stringify({ok:false,err:String(e)}));});
+})();
+"""
+
 const val NEU_FETCH_JS = """
 (function(){
   function finish(payload) {

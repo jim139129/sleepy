@@ -268,6 +268,10 @@ class AboutLicenseAttributionTest {
         Attribution("pub-docs", "zfman"),
         Attribution("eduData-GoBack", "huhu415"),
         Attribution("NUISTTable", "zyc-816"),
+        // 四校教务协议交叉验证（2026-09-19）
+        Attribution("dream2333/NWUPL-Pure-EMS", ""),
+        Attribution("linling-zy/kust-schedule", "Apache-2.0"),
+        Attribution("3056810551/nuit-class-schedule", ""),
         Attribution("SCAU-Grad-Automatically-Fill-Evaluation-Form-JS", "jiefing"),
     )
 

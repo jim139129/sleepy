@@ -320,7 +320,9 @@ class JwImportViewModel(application: Application) : AndroidViewModel(application
                 || Regex("""/http/[0-9a-f]+/""").containsMatchIn(u)
                 || u.contains(".webvpn.") -> {
                 when {
-                    u.contains("/jwapp/") -> JwProtocol.TYPE_WISEDU
+                    u.contains("jw.nuit.edu.cn") -> JwProtocol.TYPE_NUIT
+            u.contains("i.kust.edu.cn") || u.contains("kust.edu.cn") || u.contains("kmust.edu.cn") -> JwProtocol.TYPE_KUST
+            u.contains("/jwapp/") -> JwProtocol.TYPE_WISEDU
                     u.contains("jwglxt")
                         || u.matches(Regex(""".*/xtgl(/|$).*"""))
                         || u.contains("/kbcx/")
@@ -342,9 +344,16 @@ class JwImportViewModel(application: Application) : AndroidViewModel(application
             }
 
             // ① WISEDU — 金智 jwapp 微应用，URL 唯一锚点，优先级最高
+            u.contains("jw.nuit.edu.cn") -> JwProtocol.TYPE_NUIT
+            u.contains("i.kust.edu.cn") || u.contains("kust.edu.cn") || u.contains("kmust.edu.cn") -> JwProtocol.TYPE_KUST
             u.contains("/jwapp/") -> JwProtocol.TYPE_WISEDU
 
-            // ①a EAMS5 — supwisdom 平台（issue #25）：此前整条判型链无任何 EAMS5 锚点，
+            // ①a classic EAMS — server-rendered course table entry points.
+            // Both NWUPL and LIXIN expose the same TaskActivity family behind different paths.
+            u.contains("coursetableforstd")
+                || u.contains("/edu/lesson/std/timetable") -> JwProtocol.TYPE_CLASSIC_EAMS
+
+            // ①b EAMS5 — supwisdom 平台（issue #25）：此前整条判型链无任何 EAMS5 锚点，
             //    连正确的 jxglstu 课表 URL 都判 null 走通用抓取必 0 课。
             //    锚点三件套: host (jxglstu / jw.ahu / jwxt.cumtb) + 路径级 /eams5-student/ +
             //    supwisdom 唯一路径约定 /for-std/（斜杠包围, forum-standard 不误命中）。
@@ -476,7 +485,11 @@ class JwImportViewModel(application: Application) : AndroidViewModel(application
                     || lower.contains("logon.do")
                     || lower.contains("randomcode") -> JwProtocol.TYPE_QZ
 
-                // ④ WISEDU — 业务回调路径
+                // ④ NUIT/KUST JSON portal fingerprints
+                lower.contains("classdateandplace") -> JwProtocol.TYPE_NUIT
+                lower.contains("queryaweekschedule") || lower.contains("resultsjsonarr") -> JwProtocol.TYPE_KUST
+
+                // ⑤ WISEDU — 业务回调路径
                 lower.contains("/jwapp/sys/")
                     || (lower.contains("authserver/login") && lower.contains("execution=")) -> JwProtocol.TYPE_WISEDU
 
