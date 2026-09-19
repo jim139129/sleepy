@@ -2,6 +2,7 @@ package com.lingion.sleepy
 
 import android.app.Application
 import android.content.res.Configuration
+import android.util.Log
 import com.lingion.sleepy.data.AppDatabase
 import com.lingion.sleepy.data.repository.ScheduleRepository
 import com.lingion.sleepy.data.repository.ImportDraftRepository
@@ -62,7 +63,8 @@ class SleepyApp : Application() {
         // Android 15+ generated previews improve picker fidelity; older hosts
         // continue using previewLayout/previewImage from provider XML.
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            WidgetPreviewRegistrar.register(this@SleepyApp)
+            val preview = WidgetPreviewRegistrar.register(this@SleepyApp)
+            Log.i("WidgetPreview", "generated preview registration: $preview")
         }
         // 15-min periodic 兜底 (KEEP 幂等): 午夜自续链是单次任务, 强杀进程会清掉,
         // periodic 是唯一能复活它的自主驱动 — schedule() 此前零调用方 (7ecb554 起断链),
