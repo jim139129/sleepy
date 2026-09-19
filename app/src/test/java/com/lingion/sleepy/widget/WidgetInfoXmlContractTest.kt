@@ -291,6 +291,27 @@ class WidgetInfoXmlContractTest {
         }
     }
 
+    /**
+     * 锁屏(负一屏/keyguard)类别: 全部变体声明 home_screen|keyguard。
+     * 用户 2026-09-19 明示指令: 锁屏小组件直接做, 课程信息是否上锁屏由用户自己选。
+     * Android 12+ 的锁屏承载由系统/Launcher 决定, keyguard 类别是可被识别的前提。
+     */
+    @Test
+    fun `every info xml declares home_screen and keyguard categories`() {
+        infoXmls.forEach { (name, root) ->
+            val category = root.getAttribute("android:widgetCategory")
+            val parts = category.split('|', ',', ' ').filter { it.isNotBlank() }
+            assertTrue(
+                "$name must declare android:widgetCategory containing home_screen, got \"$category\"",
+                parts.contains("home_screen")
+            )
+            assertTrue(
+                "$name must declare android:widgetCategory containing keyguard, got \"$category\"",
+                parts.contains("keyguard")
+            )
+        }
+    }
+
     /** 全部 13 个 info XML 都在; 防止新变体漏建 xml */
     @Test
     fun `info xml count matches ALL_WIDGET_VARIANTS`() {

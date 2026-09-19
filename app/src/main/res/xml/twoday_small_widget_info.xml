@@ -13,6 +13,6 @@
     android:previewLayout="@layout/widget_bitmap_container"
     android:previewImage="@drawable/widget_preview_twoday_small"
     android:resizeMode="horizontal|vertical"
-    android:widgetCategory="home_screen"
+    android:widgetCategory="home_screen|keyguard"
     android:description="@string/widget_twoday_small_description"
     android:widgetFeatures="reconfigurable" />
