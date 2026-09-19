@@ -346,6 +346,15 @@ class JwImportViewModel(application: Application) : AndroidViewModel(application
             // ① WISEDU — 金智 jwapp 微应用，URL 唯一锚点，优先级最高
             u.contains("jw.nuit.edu.cn") -> JwProtocol.TYPE_NUIT
             u.contains("i.kust.edu.cn") || u.contains("kust.edu.cn") || u.contains("kmust.edu.cn") -> JwProtocol.TYPE_KUST
+            // ①a2 BUAA 新本研教务 byxt.buaa.edu.cn — 金智 jwapp homeapp 族 (2026-09-19 9 仓
+            //    cross-verified: fontlos/buaa-api + BUAASubnet/UBAA + CoolwindHF/buaa2wakeup +
+            //    cantBeFoundGroup/OpenBUAA + el-ev/BUAA-ics-gen 等, 同一端点
+            //    /jwapp/sys/homeapp/api/home/student/getMyScheduleDetail.do → datas.arrangedList)。
+            //    协议与东北大学 TYPE_NEU 同族同字段形态, 复用 NEU parser; 旧 jwxt.buaa.edu.cn
+            //    (强智 iEAS) 走下方 ②b 分支不变。必须先于通用 /jwapp/ 分支 (否则被吸进 TYPE_WISEDU,
+            //    WISEDU_FETCH_JS 走 wdkb/xskcb.do 通道拿不到 arrangedList 必空课表)。
+            u.contains("byxt.buaa.edu.cn") -> JwProtocol.TYPE_NEU
+
             u.contains("/jwapp/") -> JwProtocol.TYPE_WISEDU
 
             // ①a classic EAMS — server-rendered course table entry points.

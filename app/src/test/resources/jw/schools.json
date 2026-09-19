@@ -152,8 +152,8 @@
   {
     "sortKey": "B",
     "name": "北京航空航天大学",
-    "url": "https://jwxt.buaa.edu.cn:7001/ieas2.1",
-    "type": "qz_ieas",
+    "url": "https://byxt.buaa.edu.cn/jwapp/sys/homeapp/index.do",
+    "type": "neu",
     "aliases": [
       "buaa",
       "北航"

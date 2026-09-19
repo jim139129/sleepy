@@ -490,6 +490,16 @@ private val perSchoolEntries: List<PerSchoolEntry> = listOf(
         "HeraldStudentCurriculum (idailylife)"
     ),
     PerSchoolEntry(
+        "school-buaa-byxt", "北京航空航天大学 byxt (2026-09)",
+        "fontlos/buaa-api (Rust, MIT)\nBUAASubnet/UBAA (Kotlin, MIT)\nCoolwindHF/buaa2wakeup (Python, MIT)\n" +
+            "awesome-buaa-cs/buaa-curriculum (API.md 旁证)\ncantBeFoundGroup/OpenBUAA (Python)\n" +
+            "el-ev/BUAA-ics-gen (Python, MIT)\nKrignd/KAgenda (Kotlin)\nYiki21/iclass_buaa_tui (Rust, GPL-3.0)\n" +
+            "Lidozs55/BUAAer-Smart-Schedule-on-electron (Vue)\nWhXcjm/buaa-byxt-aischedule (JS, GPL-3.0)\n" +
+            "MeanZhang/buaa-ai-schedule (JS, MIT, archived)\nAlyssumira/BUAA-Schedule (Kotlin, MIT)\n" +
+            "lyy1119/BuaaScheduleRender (Go, MIT, GSMIS 研究生形态参考)\n" +
+            "zjafb/BUAA-Hangzhou-Schedule (MIT, UBAA fork, 杭州校区旁证)"
+    ),
+    PerSchoolEntry(
         "school-bjtu", "北京交通大学 BJTU",
         "bjtu_mis_Android (wan300, MIT)\nBJTU-MIS-HarmonyOS (Anyes666, MIT)\nBJTUselfService (HFDLYS, MIT)\n" +
             "bjtu-cli (fish2lab)\nBJTUselfService-macOS (fish2lab)\nBJTU-course-assistant (s1y4x1)\n" +
