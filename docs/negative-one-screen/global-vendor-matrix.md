@@ -43,6 +43,16 @@ B 级已落地：
 - 魅族 Aicy 接入（无任何公开协议）
 - Snapdragon Spaces 3D 入口 / 各厂商快应用
 
+## APK 侧交叉验证边界
+
+这份矩阵不是把每个品牌都宣称为“已通过真机认证”。它把可由 APK 自助完成的共同契约与必须由厂商平台完成的准入分开：
+
+- 代码注册表：`GlobalWidgetCompatibility.kt`，每个主要生态都有稳定 ID、接入等级和边界说明。
+- JVM 契约：`GlobalWidgetCompatibilityTest` 锁唯一 ID、标准 AppWidget 路径、平台绑定说明和主要生态覆盖。
+- Provider 契约：`WidgetInfoXmlContractTest` 锁 13 个 provider 的 manifest、尺寸、预览、resize、重配置与多语言资源。
+- 官方共同依据：Android [AppWidget 概览](https://developer.android.com/develop/ui/views/appwidgets/overview)、[预览规范](https://developer.android.com/develop/ui/views/appwidgets/previews)、[AppWidgetProvider API](https://developer.android.com/reference/android/appwidget/AppWidgetProvider) 与 AOSP [Widgets and shortcuts](https://source.android.com/docs/core/display/widgets-shortcuts)。
+- 仍需设备级验证：不同厂商 launcher 的具体裁剪、刷新策略、后台限制、折叠屏尺寸和私有负一屏入口；JVM 契约不能冒充真机认证。
+
 ## 公共兼容层契约
 
 | 约束 | 来源 | 测试 |
