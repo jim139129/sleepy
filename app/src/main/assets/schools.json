@@ -1208,6 +1208,14 @@
   },
   {
     "sortKey": "J",
+    "name": "江西中医药大学",
+    "url": "https://jiaowu.jxutcm.edu.cn/",
+    "type": "cf_new",
+    "aliases": [],
+    "sortKeyFull": "jiangxizhongyiyaodaxue"
+  },
+  {
+    "sortKey": "J",
     "name": "嘉兴大学",
     "url": "http://jwzx.zjxu.edu.cn/jwglxt/xtgl/login_slogin.html",
     "type": "zf_new",

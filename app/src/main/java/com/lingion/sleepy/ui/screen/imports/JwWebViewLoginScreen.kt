@@ -320,6 +320,16 @@ fun JwWebViewLoginScreen(
                         evaluateFetchWithTimeout(wv, CQU_FETCH_JS)
                         return@CaptureBar
                     }
+                    // 新青果 NTSS (江西中医药大学等, /new/student/xsgrkb): 课表数据只在
+                    // FullCalendar 的 getCalendarWeekDatas JSON 接口里, 页面 HTML 无课程数据。
+                    // WebView 内逐周并行 POST 1..22 周合并 (每行自带全学期周次串,
+                    // JwCfNewParser 按唯一键去重), businessHours 节次时间与
+                    // getDatesOfWeek 开学日随 payload 回传。
+                    if (school.type == JwProtocol.TYPE_CF_NEW) {
+                        evaluateFetchWithTimeout(wv, CF_NEW_FETCH_JS)
+                        return@CaptureBar
+                    }
+
                     // WHUT（武汉理工）：金智 jwapp 变体 — kcbcxby 微应用三段 fetch
                     // (currentUser 学号+学期 → cxjcs 开学日期/总周数 → jcjcx 节次映射 → cxxskcb 课表)
                     if (school.type == JwProtocol.TYPE_WHUT) {
