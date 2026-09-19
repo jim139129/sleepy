@@ -12,7 +12,6 @@ import androidx.core.content.ContextCompat
 import com.lingion.sleepy.MainActivity
 import com.lingion.sleepy.R
 import com.lingion.sleepy.util.AppPrefs
-import com.lingion.sleepy.widget.resolveSchemePublic
 
 /**
  * Keeps the promoted course notification's progress synchronized with the
@@ -26,6 +25,7 @@ class FluidCloudService : Service() {
     private var startTime = ""
     private var notifyEpoch = 0L
     private var classEpoch = 0L
+    private var updateSequence = 0
 
     private val updater = object : Runnable {
         override fun run() {
@@ -84,61 +84,29 @@ class FluidCloudService : Service() {
 
     private fun postProgressNotification() {
         val now = System.currentTimeMillis()
-        val totalWindow = (classEpoch - notifyEpoch).coerceAtLeast(1L)
-        val elapsed = (now - notifyEpoch).coerceIn(0L, totalWindow)
-        val progress = ((elapsed * 100L) / totalWindow).toInt().coerceIn(0, 100)
-        val primary = AppPrefs.getBeforeClassFluidPrimary(this)
-        val primaryText = when (primary) {
-            "name" -> courseName
-            "time" -> startTime
-            else -> room
-        }
-        val coursePreview = buildList {
-            if (startTime.isNotBlank()) add(startTime)
-            add(room)
-            if (teacher.isNotBlank()) add(teacher)
-        }.joinToString("  ·  ")
-
-        val style = NotificationCompat.ProgressStyle()
-            .setStyledByProgress(true)
-            .setProgress(progress)
-        // 不分 segments：课前提醒是一个连续倒计时进度，旧代码的 70/30 分段没有实际语义，
-        // 反而在 70% 处把进度条断开造成视觉割裂。
-
-        // 通知色跟随主题（之前硬编码默认紫 0xFF6750A4，用户选春绿/海蓝等主题后通知色与 app 内不一致）。
-        // 复用 widget 渲染侧的 resolveSchemePublic 派生 primary（支持 system=MaterialYou 动态取色）。
-        val isSystemDark = (resources.configuration.uiMode and
-            android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-            android.content.res.Configuration.UI_MODE_NIGHT_YES
-        val themePrimaryArgb = resolveSchemePublic(
+        updateSequence = if (updateSequence == Int.MAX_VALUE) 1 else updateSequence + 1
+        val state = CourseLiveCardState(
+            courseName = courseName,
+            room = room,
+            teacher = teacher,
+            startTime = startTime,
+            notifyEpoch = notifyEpoch,
+            classEpoch = classEpoch,
+            nowEpoch = now,
+            updateSequence = updateSequence
+        )
+        val contentIntent = PendingIntent.getActivity(
             this,
-            AppPrefs.getThemeKey(this),
-            AppPrefs.isDarkMode(this, isSystemDark)
-        ).primary.toArgb()
-
-        val notification = NotificationCompat.Builder(this, CourseNotificationScheduler.CHANNEL_FLUID)
-            .setSmallIcon(R.drawable.ic_notification_time)
-            .setColor(themePrimaryArgb)
-            .setContentTitle(courseName)
-            .setContentText(coursePreview)
-            .setStyle(style)
-            .setSubText(room)
-            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-            .setProgress(100, progress, false)
-            .setOngoing(true)
-            .setSilent(true)
-            .setOnlyAlertOnce(true)
-            .setRequestPromotedOngoing(true)
-            .setContentIntent(
-                PendingIntent.getActivity(
-                    this,
-                    0,
-                    Intent(this, MainActivity::class.java),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-            )
-            .setShortCriticalText(primaryText.take(7))
-            .build()
+            0,
+            Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = VendorLiveCardRenderer.build(
+            context = this,
+            state = state,
+            contentIntent = contentIntent,
+            channelId = CourseNotificationScheduler.CHANNEL_FLUID
+        )
 
         if (android.os.Build.VERSION.SDK_INT >= 26) {
             // 前台服务路径: startForeground 本身不需要 POST_NOTIFICATIONS 运行时权限
@@ -156,7 +124,7 @@ class FluidCloudService : Service() {
         }
         android.util.Log.d(
             "FluidCloudService",
-            "updated course progress=$progress notify=$notifyEpoch class=$classEpoch"
+            "updated course progress=${state.progress} notify=$notifyEpoch class=$classEpoch"
         )
     }
 
