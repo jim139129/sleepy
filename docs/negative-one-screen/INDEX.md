@@ -1,6 +1,6 @@
-# 负一屏 (Minus-One Screen) 六厂商接入门槛速查
+# 负一屏 (Minus-One Screen) 全球厂商接入门槛速查
 
-> 目录目的: 只回答一件事 —— **第三方 app 怎样才能把内容放上各家负一屏**。接入路径 / 载体形态 / 审核门槛 / 商务条件 / 自助程度。
+> 目录目的: 只回答一件事 —— **第三方 app 怎样才能把内容放上各家负一屏**。接入路径 / 载体形态 / 审核门槛 / 商务条件 / 自助程度。全球没有公开私有协议的厂商统一走标准 Android AppWidget；完整全球矩阵见 [global-vendor-matrix.md](./global-vendor-matrix.md)。
 > 抓取时间: 2026-09-17 (3 research agent 并行实测官方开发者平台: 华为+荣耀 / OPPO+vivo / 小米+魅族)
 > 抓取原则: 厂商官方页优先(JS 渲染站实测读正文)→ 社区二次核实;每文件首行标注证据等级;查无公开资料的显式记录,不编造 URL。
 > 相邻域(内容互不重复): [长按菜单](../long-press-menu/INDEX.md) · [桌面形态与变形](../desktop-morph/INDEX.md) · [设计规范](../oem-design-specs/INDEX.md) · [开源与社区](../oem-open-source/INDEX.md) · [实时信息卡片](../live-cards/INDEX.md) · [AppWidget 启动器兼容](../widget-vendor-specs/INDEX.md)
