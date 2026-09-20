@@ -817,7 +817,7 @@ Per-school attribution (one card per school, expand to see details) — Hefei Un
     <string name="period_table_copy_dialog_title">Copy bell schedule</string>
     <string name="period_table_name_label">Bell schedule name</string>
     <string name="period_table_delete_confirm">Delete bell schedule</string>
-    <string name="period_table_delete_msg_body">Delete bell schedule "%1$s"? This can be undone.</string>
+    <string name="period_table_delete_msg_body">Delete bell schedule "%1$s"?</string>
     <string name="period_table_delete_blocked">Still bound by %1$d timetable(s), rebind first</string>
     <string name="period_table_bind_label">Bell schedule</string>
     <string name="period_table_unbound">Not bound (use this table\'s periods)</string>

@@ -804,7 +804,7 @@
     <string name="period_table_copy_dialog_title">複製作息表</string>
     <string name="period_table_name_label">作息表名稱</string>
     <string name="period_table_delete_confirm">刪除作息表</string>
-    <string name="period_table_delete_msg_body">確定要刪除作息表「%1$s」嗎？此操作可復原。</string>
+    <string name="period_table_delete_msg_body">確定要刪除作息表「%1$s」嗎？</string>
     <string name="period_table_delete_blocked">該作息表仍被 %1$d 張課表綁定，請先改綁</string>
     <string name="period_table_bind_label">作息表</string>
     <string name="period_table_unbound">未綁定（使用本表作息）</string>
