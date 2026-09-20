@@ -804,7 +804,7 @@
     <string name="period_table_copy_dialog_title">時程表をコピー</string>
     <string name="period_table_name_label">時程表名</string>
     <string name="period_table_delete_confirm">時程表を削除</string>
-    <string name="period_table_delete_msg_body">時程表「%1$s」を削除しますか？この操作は取り消せます。</string>
+    <string name="period_table_delete_msg_body">時程表「%1$s」を削除しますか？</string>
     <string name="period_table_delete_blocked">%1$d 件の時間割が使用中です。先に切り替えてください</string>
     <string name="period_table_bind_label">時程表</string>
     <string name="period_table_unbound">未バインド（この時間割の時限を使用）</string>

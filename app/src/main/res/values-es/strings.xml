@@ -804,7 +804,7 @@ Agradecimientos por universidad (una tarjeta por universidad, expandir para ver 
     <string name="period_table_copy_dialog_title">Copiar horario de períodos</string>
     <string name="period_table_name_label">Nombre del horario de períodos</string>
     <string name="period_table_delete_confirm">Eliminar horario de períodos</string>
-    <string name="period_table_delete_msg_body">¿Eliminar el horario de períodos «%1$s»? Se puede deshacer.</string>
+    <string name="period_table_delete_msg_body">¿Eliminar el horario de períodos «%1$s»?</string>
     <string name="period_table_delete_blocked">Aún vinculado a %1$d horario(s), revincula primero</string>
     <string name="period_table_bind_label">Horario de períodos</string>
     <string name="period_table_unbound">Sin vincular (usa los períodos de este horario)</string>
