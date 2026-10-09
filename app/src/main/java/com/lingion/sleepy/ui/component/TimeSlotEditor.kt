@@ -1,46 +1,70 @@
 package com.lingion.sleepy.ui.component
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.lingion.sleepy.R
 import com.lingion.sleepy.data.entity.SmartPeriodConfig
 import com.lingion.sleepy.ui.theme.SleepyTheme
 import com.lingion.sleepy.ui.theme.noRippleClickable
 import com.lingion.sleepy.util.TimeTableUtils
 import com.lingion.sleepy.util.TimeTableUtils.TimeSlotRow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
 /**
@@ -122,6 +146,8 @@ fun TimeSlotEditor(
     onRowsChange: (List<TimeSlotRow>) -> Unit,
     smartConfig: SmartPeriodConfig = SmartPeriodConfig(),
     onSmartConfigChange: (SmartPeriodConfig) -> Unit = {},
+    reorderEnabled: Boolean = false,
+    courses: List<com.lingion.sleepy.data.entity.CourseEntity> = emptyList(),
     modifier: Modifier = Modifier,
     periodTableOptions: List<PeriodTableOption> = emptyList(),
     selectedPeriodTableId: Long? = null,
@@ -158,7 +184,9 @@ fun TimeSlotEditor(
         when (mode) {
             Mode.Manual -> ManualTimeSlotEditor(
                 rows = rows,
-                onRowsChange = onRowsChange
+                onRowsChange = onRowsChange,
+                reorderEnabled = reorderEnabled,
+                courses = courses
             )
             Mode.Auto -> SmartPeriodEditor(
                 config = smartConfig,
@@ -280,65 +308,205 @@ private fun BindChoiceRow(title: String, selected: Boolean, onClick: () -> Unit,
 private fun ManualTimeSlotEditor(
     rows: List<TimeSlotRow>,
     onRowsChange: (List<TimeSlotRow>) -> Unit,
+    reorderEnabled: Boolean,
+    courses: List<com.lingion.sleepy.data.entity.CourseEntity>,
     modifier: Modifier = Modifier
 ) {
+    var displayRows by remember { mutableStateOf(rows) }
+    var draggingIndex by remember { mutableStateOf<Int?>(null) }
+    var invalidTarget by remember { mutableStateOf(false) }
+    var targetIndex by remember { mutableStateOf<Int?>(null) }
+    val density = LocalDensity.current
+    val rowGapPx = with(density) { ROW_GAP_DP.toPx() }
+    // Animatable: spring 驱动 dragOffset, 修 P1 rubber-banding + P3 瞬移无回弹
+    val dragOffsetY = remember { Animatable(0f) }
+    val rowHeightPx = remember { mutableStateOf(1f) }
+    val coroutineScope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val invalidMsg = stringResource(R.string.timeslot_drop_invalid)
+    LaunchedEffect(rows) { if (draggingIndex == null) displayRows = rows }
     val colors = MaterialTheme.colorScheme
 
-    Column(modifier = modifier) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = stringResource(R.string.n_periods, rows.size),
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceVariant
-            )
-            // 2026-09-16 用户: 裸 TextButton 无边界无色块 — 小号色块按钮
-            Button(
-                onClick = { onRowsChange(TimeTableUtils.appendEmptyRow(rows)) },
-                shape = SleepyTheme.shapes.medium,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.secondaryContainer,
-                    contentColor = colors.onSecondaryContainer
-                )
+    Box(modifier = modifier) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(
-                    Icons.Outlined.Add,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
+                Text(
+                    text = stringResource(R.string.n_periods, rows.size),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(stringResource(R.string.add_period), style = MaterialTheme.typography.labelMedium)
+                // 2026-09-16 用户: 裸 TextButton 无边界无色块 — 小号色块按钮
+                Button(
+                    onClick = { onRowsChange(TimeTableUtils.appendEmptyRow(rows)) },
+                    shape = SleepyTheme.shapes.medium,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.secondaryContainer,
+                        contentColor = colors.onSecondaryContainer
+                    )
+                ) {
+                    Icon(
+                        Icons.Outlined.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(R.string.add_period), style = MaterialTheme.typography.labelMedium)
+                }
             }
-        }
+            if (reorderEnabled) {
+                Text(
+                    text = stringResource(R.string.timeslot_longpress_to_reorder),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurface,
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 6.dp)
+                )
+            }
 
-        // Rows
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(colors.surfaceContainerLow, SleepyTheme.shapes.large)
-                .padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            rows.forEach { row ->
-                TimeSlotRowItem(
-                    row = row,
-                    canDelete = rows.size > 1,
-                    onStartChange = { newStart ->
-                        onRowsChange(rows.map { if (it.node == row.node) it.copy(start = newStart) else it })
-                    },
-                    onEndChange = { newEnd ->
-                        onRowsChange(rows.map { if (it.node == row.node) it.copy(end = newEnd) else it })
-                    },
-                    onDelete = {
-                        onRowsChange(TimeTableUtils.removeAndRenumber(rows, row.node))
+            // Rows
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.surfaceContainerLow, SleepyTheme.shapes.large)
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(ROW_GAP_DP)
+            ) {
+                displayRows.forEachIndexed { index, row ->
+                    val isDragging = draggingIndex == index
+                    val isDropTarget = !isDragging &&
+                        targetIndex != null &&
+                        targetIndex == index &&
+                        reorderEnabled
+                    val dropInvalid = isDragging && invalidTarget
+                    val stateDesc = when {
+                        dropInvalid -> stringResource(R.string.timeslot_drop_invalid)
+                        isDragging -> stringResource(R.string.timeslot_reorder_in_progress)
+                        isDropTarget -> stringResource(R.string.timeslot_row_drop_target)
+                        else -> ""
                     }
-                )
+                    val longPressLabel = stringResource(R.string.timeslot_longpress_to_reorder)
+                    val courseNodeLabel = stringResource(R.string.course_node_format, index + 1)
+                    val rowLongPress = Modifier.pointerInput(index, reorderEnabled) {
+                        if (!reorderEnabled) return@pointerInput
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                draggingIndex = index
+                                targetIndex = index
+                                invalidTarget = false
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                coroutineScope.launch { dragOffsetY.snapTo(0f) }
+                            },
+                            onDragCancel = {
+                                coroutineScope.launch {
+                                    dragOffsetY.animateTo(0f, spring())
+                                    draggingIndex = null
+                                    targetIndex = null
+                                    invalidTarget = false
+                                    displayRows = rows
+                                }
+                            },
+                            onDragEnd = {
+                                val from = draggingIndex
+                                val to = targetIndex
+                                // 2026-10-06 实测发现 race: LaunchedEffect(rows) 在 onRowsChange 后
+                                // 因 rows key 变(toList 新对象)再次触发, 此时若 draggingIndex 仍非 null,
+                                // 会再次跑条件检查; 而 coroutine 内异步设 null → LaunchedEffect 之后又跑一遍
+                                // 把 displayRows 重置回外部 rows. 修法: 同步设 draggingIndex=null + displayRows.
+                                if (from != null && to != null && to != from &&
+                                    TimeTableUtils.canReorderTimeSlot(displayRows, from, to, courses)
+                                ) {
+                                    val reordered = TimeTableUtils.reorderTimeSlotRows(displayRows, from, to)
+                                    draggingIndex = null
+                                    targetIndex = null
+                                    invalidTarget = false
+                                    displayRows = reordered
+                                    onRowsChange(reordered)
+                                    coroutineScope.launch {
+                                        dragOffsetY.animateTo(0f, spring())
+                                        snackbarHostState.showSnackbar(
+                                            message = invalidMsg,
+                                            duration = androidx.compose.material3.SnackbarDuration.Short
+                                        )
+                                    }
+                                } else {
+                                    draggingIndex = null
+                                    targetIndex = null
+                                    invalidTarget = false
+                                    displayRows = rows
+                                    coroutineScope.launch {
+                                        dragOffsetY.animateTo(0f, spring())
+                                    }
+                                }
+                            },
+                            onDrag = { change, amount ->
+                                change.consume()
+                                val from = draggingIndex ?: return@detectDragGesturesAfterLongPress
+                                if (invalidTarget) {
+                                    // 冻结: 不再累加 amount.y, 不再换槽 (修 P1 rubber-banding)
+                                    return@detectDragGesturesAfterLongPress
+                                }
+                                coroutineScope.launch {
+                                    val newOffset = (dragOffsetY.value + amount.y)
+                                        .coerceIn(-1e6f, 1e6f)
+                                    dragOffsetY.snapTo(newOffset)
+                                }
+                                val rowPitch = (rowHeightPx.value + rowGapPx).coerceAtLeast(1f)
+                                val to = (from + (dragOffsetY.value / rowPitch).toInt())
+                                    .coerceIn(displayRows.indices)
+                                targetIndex = to
+                                val nowInvalid = !TimeTableUtils.canReorderTimeSlot(displayRows, from, to, courses)
+                                if (nowInvalid && !invalidTarget) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.Reject)
+                                    // 冻结: snap 到 (to - from) 行偏 — 边界位停止跟随手指
+                                    coroutineScope.launch {
+                                        dragOffsetY.animateTo(
+                                            (to - from) * rowPitch,
+                                            spring()
+                                        )
+                                    }
+                                }
+                                invalidTarget = nowInvalid
+                            }
+                        )
+                    }
+                    TimeSlotRowItem(
+                        row = row.copy(node = index + 1),
+                        canDelete = displayRows.size > 1,
+                        isBlank = row.start.isBlank() && row.end.isBlank(),
+                        reorderEnabled = reorderEnabled,
+                        isDragging = isDragging,
+                        isDropTarget = isDropTarget,
+                        dropInvalid = dropInvalid,
+                        longPressModifier = rowLongPress,
+                        offsetY = dragOffsetY.value,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .offset { IntOffset(0, dragOffsetY.value.toInt()) }
+                            .onSizeChanged { size -> if (size.height > 0) rowHeightPx.value = size.height.toFloat() }
+                            .semantics(mergeDescendants = true) {
+                                contentDescription = courseNodeLabel
+                                stateDescription = stateDesc
+                                if (reorderEnabled) {
+                                    onLongClick(label = longPressLabel) { true }
+                                }
+                            },
+                        onStartChange = { newStart -> onRowsChange(displayRows.map { if (it.node == row.node) it.copy(start = newStart) else it }) },
+                        onEndChange = { newEnd -> onRowsChange(displayRows.map { if (it.node == row.node) it.copy(end = newEnd) else it }) },
+                        onDelete = { onRowsChange(TimeTableUtils.removeAndRenumber(displayRows, row.node)) }
+                    )
+                }
             }
         }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 
@@ -346,48 +514,109 @@ private fun ManualTimeSlotEditor(
 private fun TimeSlotRowItem(
     row: TimeSlotRow,
     canDelete: Boolean,
+    isBlank: Boolean,
+    reorderEnabled: Boolean,
+    isDragging: Boolean,
+    isDropTarget: Boolean,
+    dropInvalid: Boolean,
+    longPressModifier: Modifier,
+    offsetY: Float,
+    modifier: Modifier = Modifier,
     onStartChange: (String) -> Unit,
     onEndChange: (String) -> Unit,
     onDelete: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+    val containerColor = when {
+        dropInvalid -> colors.errorContainer
+        isDragging -> colors.primaryContainer
+        isBlank -> colors.secondaryContainer  // 空白行特权视觉: 整卡浅色
+        else -> colors.surface
+    }
+    val rowShape = SleepyTheme.shapes.medium
+    val dragElevation = if (isDragging) 6.dp else 0.dp
+    val dropBorderModifier = if (isDropTarget) Modifier.border(
+        width = 2.dp,
+        color = colors.primary,
+        shape = rowShape
+    ) else Modifier
+    val blankHint = if (isBlank) stringResource(R.string.timeslot_row_blank_hint) else ""
+    Column(
+        modifier = modifier.fillMaxWidth()
     ) {
-        Text(
-            text = stringResource(R.string.course_node_format, row.node),
-            modifier = Modifier.width(44.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.onSurface
-        )
-        TimePickerField(
-            value = row.start,
-            onValueChange = onStartChange,
-            label = stringResource(R.string.start_label),
-            modifier = Modifier.weight(1f)
-        )
-        TimePickerField(
-            value = row.end,
-            onValueChange = onEndChange,
-            label = stringResource(R.string.end_label),
-            modifier = Modifier.weight(1f)
-        )
-        if (canDelete) {
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    Icons.Outlined.RemoveCircleOutline,
-                    contentDescription = stringResource(R.string.delete_period),
-                    tint = colors.error,
-                    modifier = Modifier.size(20.dp)
-                )
+        // 目标槽插入指示线 (顶部 2dp 横条)
+        if (isDropTarget) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .background(colors.primary)
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(dragElevation, rowShape)
+                .clip(rowShape)
+                .background(containerColor)
+                .then(dropBorderModifier)
+                .then(if (reorderEnabled) longPressModifier else Modifier)
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.course_node_format, row.node),
+                modifier = Modifier.width(44.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (dropInvalid) colors.onErrorContainer else colors.onSurface
+            )
+            TimePickerField(
+                value = row.start,
+                onValueChange = onStartChange,
+                label = stringResource(R.string.start_label),
+                modifier = Modifier.weight(1f)
+            )
+            TimePickerField(
+                value = row.end,
+                onValueChange = onEndChange,
+                label = stringResource(R.string.end_label),
+                modifier = Modifier.weight(1f)
+            )
+            if (canDelete) {
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.RemoveCircleOutline,
+                        contentDescription = stringResource(R.string.delete_period),
+                        tint = if (dropInvalid) colors.onErrorContainer else colors.error,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            } else {
+                Spacer(Modifier.width(32.dp))
             }
-        } else {
-            Spacer(Modifier.width(32.dp))
+        }
+        // 空白行注脚 + 目标槽提示
+        if (isBlank && blankHint.isNotEmpty()) {
+            Text(
+                text = blankHint,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 4.dp)
+            )
+        }
+        if (isDropTarget) {
+            Text(
+                text = stringResource(R.string.timeslot_row_drop_target),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.primary,
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 4.dp)
+            )
         }
     }
 }
+
+private val ROW_GAP_DP = 10.dp
