@@ -1,0 +1,28 @@
+[
+  {
+    "full_name": "qiqqqqq517/shangkeschedule",
+    "stars": 28,
+    "lang": "Kotlin",
+    "archived": false,
+    "pushed_at": "2026-10-09T10:21:35Z",
+    "description": "开源无广告课程表 App「上课」",
+    "html_url": "https://github.com/qiqqqqq517/shangkeschedule",
+    "default_branch": "main",
+    "license": "Apache-2.0",
+    "hbsm_evidence": "timetable_schools.json: HBSM = zhengfang_new, url https://jwxt.hbc.edu.cn/",
+    "why_included": "同赛道课程表 App, 独立收录 HBSM 为 zhengfang_new — 直接印证 zf_new 判定"
+  },
+  {
+    "full_name": "LonelyMarch/OpenWakeUp",
+    "stars": 6,
+    "lang": "Kotlin",
+    "archived": false,
+    "pushed_at": "2026-09-25T05:23:40Z",
+    "description": "OpenWakeUp 课程表",
+    "html_url": "https://github.com/LonelyMarch/OpenWakeUp",
+    "default_branch": "main",
+    "license": "AGPL-3.0",
+    "hbsm_evidence": "schools.json data[]: HBSM = zf, url https://jwxt.hbc.edu.cn/",
+    "why_included": "WakeUp 谱系课程表 App, 收录 HBSM 为 type=zf 伞型, 同域印证"
+  }
+]

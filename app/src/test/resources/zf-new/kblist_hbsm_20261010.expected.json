@@ -1,0 +1,203 @@
+{
+  "_note": "湖北商贸学院 HBSM 真实报文的期望解析结果, 与 kblist_hbsm_20261010.json 配对; 由 parser 语义独立推导, 测试运行时逐字段断言。",
+  "courses": [
+    {
+      "name": "C语言程序设计",
+      "day": 1,
+      "startNode": 3,
+      "endNode": 4,
+      "startWeek": 9,
+      "endWeek": 16,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "XJB-104"
+    },
+    {
+      "name": "军事理论",
+      "day": 1,
+      "startNode": 7,
+      "endNode": 8,
+      "startWeek": 6,
+      "endWeek": 7,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "XJA-109"
+    },
+    {
+      "name": "形势与政策-1",
+      "day": 1,
+      "startNode": 7,
+      "endNode": 8,
+      "startWeek": 11,
+      "endWeek": 17,
+      "type": 1,
+      "teacher": "某某某",
+      "room": "XJB-010"
+    },
+    {
+      "name": "C语言程序设计课程设计",
+      "day": 1,
+      "startNode": 9,
+      "endNode": 12,
+      "startWeek": 13,
+      "endWeek": 16,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "XSA-405华为云学院产学研基地（5）"
+    },
+    {
+      "name": "大学数学1",
+      "day": 2,
+      "startNode": 3,
+      "endNode": 4,
+      "startWeek": 6,
+      "endWeek": 17,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "XJB-111"
+    },
+    {
+      "name": "大学英语1",
+      "day": 2,
+      "startNode": 5,
+      "endNode": 6,
+      "startWeek": 6,
+      "endWeek": 17,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "XJA-402"
+    },
+    {
+      "name": "C语言程序设计",
+      "day": 2,
+      "startNode": 7,
+      "endNode": 8,
+      "startWeek": 6,
+      "endWeek": 12,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "XJB-409"
+    },
+    {
+      "name": "体育1",
+      "day": 3,
+      "startNode": 3,
+      "endNode": 4,
+      "startWeek": 6,
+      "endWeek": 16,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "田径场"
+    },
+    {
+      "name": "计算机应用基础",
+      "day": 3,
+      "startNode": 7,
+      "endNode": 8,
+      "startWeek": 9,
+      "endWeek": 16,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "XJA-201"
+    },
+    {
+      "name": "军事理论",
+      "day": 4,
+      "startNode": 3,
+      "endNode": 4,
+      "startWeek": 5,
+      "endWeek": 17,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "XJA-109"
+    },
+    {
+      "name": "思想道德与法治",
+      "day": 4,
+      "startNode": 5,
+      "endNode": 6,
+      "startWeek": 5,
+      "endWeek": 17,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "XJB-109"
+    },
+    {
+      "name": "C语言程序设计",
+      "day": 4,
+      "startNode": 7,
+      "endNode": 8,
+      "startWeek": 9,
+      "endWeek": 12,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "XSA-322电子商务综合实训室"
+    },
+    {
+      "name": "C语言程序设计",
+      "day": 4,
+      "startNode": 7,
+      "endNode": 8,
+      "startWeek": 13,
+      "endWeek": 16,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "XSA-305新文科基础实验室（2）"
+    },
+    {
+      "name": "计算机应用基础",
+      "day": 4,
+      "startNode": 9,
+      "endNode": 10,
+      "startWeek": 9,
+      "endWeek": 16,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "XSB-312软件综合实训室（3）"
+    },
+    {
+      "name": "大学数学1",
+      "day": 5,
+      "startNode": 1,
+      "endNode": 2,
+      "startWeek": 9,
+      "endWeek": 11,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "XJB-111"
+    },
+    {
+      "name": "大学英语1",
+      "day": 5,
+      "startNode": 3,
+      "endNode": 4,
+      "startWeek": 5,
+      "endWeek": 15,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "XJA-402"
+    },
+    {
+      "name": "思想道德与法治",
+      "day": 5,
+      "startNode": 7,
+      "endNode": 8,
+      "startWeek": 8,
+      "endWeek": 10,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "XJB-109"
+    },
+    {
+      "name": "体育1",
+      "day": 6,
+      "startNode": 3,
+      "endNode": 4,
+      "startWeek": 5,
+      "endWeek": 5,
+      "type": 0,
+      "teacher": "某某某",
+      "room": "田径场"
+    }
+  ]
+}
