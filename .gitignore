@@ -61,3 +61,26 @@ release-build/
 artifacts/
 *.idsig
 oppo-fluid-cloud-upk/build/
+
+# 本地调试截图与 dump (2026-10-10 清理: 根目录 34 个测试产物移除, 永久 ignore)
+# 模拟器/真机点测截图与 UI dump 只留本地, 禁止入库。
+/dot-*.png
+/redot-*.png
+/forcedot-*.png
+/fix*-*.png
+/final-*.png
+/jump-*.png
+/scope-*.png
+/tablet-*.png
+/dump-*.xml
+
+# 厂商官方文档镜像 (2026-10-10 清理: 531 个 vivo 商店 JSON 出库, 整目录永久 ignore)
+# 厂商文档在各自官网公开可得, 镜像进仓库只加噪音。
+docs/_official-docs/
+docs/archive/
+docs/previews/
+docs/985-batch-b-wave-*.md
+docs/HEU_JWGL_IMPORT.md
+docs/PARSER_SPEC_REPORT.md
+docs/YSU_BOYA_PP_IMPORT.md
+docs/four-school-cross-validation-*.md
