@@ -111,6 +111,95 @@ class ScheduleRepository(private val db: AppDatabase) {
 
     suspend fun getTable(id: Long): TimeTableEntity? = tableDao.getById(id)
 
+    /** Back up and append in one transaction; a failed write leaves no partial backup. */
+    internal suspend fun appendImportedCourses(
+        tableId: Long,
+        incoming: List<CourseEntity>,
+        incomingTimeJson: String,
+        incomingNodes: Int,
+        backupOriginal: Boolean,
+        appendConflicts: Boolean,
+        authoritativeGroups: Boolean,
+        backupName: String,
+    ): Int {
+        val added = db.withTransaction {
+            val table = tableDao.getById(tableId) ?: error("Target timetable no longer exists")
+            val bound = table.periodTableId?.let { periodTableDao.getById(it) }
+            val effective = table.hydratedWith(bound)
+            val existing = courseDao.getByTable(tableId)
+            val extended = com.lingion.sleepy.util.CourseImportPolicy.mergeTimeJson(
+                effective.timeJson, incomingTimeJson,
+                maxOf(incomingNodes, incoming.maxOfOrNull { it.startNode + it.step - 1 } ?: 0)
+            )
+            val accepted = com.lingion.sleepy.util.CourseImportPolicy.selectIncoming(
+                incoming, existing, appendConflicts, extended
+            )
+            if (accepted.isEmpty()) return@withTransaction 0
+            captureForUndo()
+            if (backupOriginal) {
+                val names = tableDao.getAll().map { it.name }
+                val periods = periodTableDao.getAll().map { it.name }
+                val name = com.lingion.sleepy.util.TimeTableUtils.suggestUniqueName(backupName, names, periods)
+                // Freeze the effective bell schedule so a later shared-schedule update cannot change the backup.
+                val backupId = tableDao.insert(effective.copy(
+                    id = 0, name = name, isDefault = false, periodTableId = null,
+                    preBindSnapshotJson = "", createdAt = System.currentTimeMillis(), reminderEnabled = false
+                ))
+                courseDao.insertAll(existing.map { it.copy(id = 0, tableId = backupId) })
+            }
+            // Imported group IDs must not merge with a group already present in the target.
+            val groups = mutableMapOf<String, String>()
+            val prepared = (if (authoritativeGroups) accepted else assignGroupIds(accepted)).map {
+                it.copy(id = 0, tableId = tableId,
+                    groupId = if (it.groupId.isBlank()) java.util.UUID.randomUUID().toString()
+                        else groups.getOrPut(it.groupId) { java.util.UUID.randomUUID().toString() })
+            }
+            courseDao.insertAll(prepared)
+            val maxNode = com.lingion.sleepy.util.TimeTableUtils.parseTimeSlotRows(extended)
+                .maxOfOrNull { it.node } ?: effective.nodesPerDay
+            if (bound != null && extended != bound.timeJson) {
+                periodTableDao.update(bound.copy(timeJson = extended, nodesPerDay = maxNode, updatedAt = System.currentTimeMillis()))
+            }
+            tableDao.update(table.copy(
+                maxWeek = maxOf(table.maxWeek, accepted.maxOf { it.endWeek }),
+                timeJson = if (bound == null) extended else table.timeJson,
+                nodesPerDay = if (bound == null) maxNode else table.nodesPerDay,
+            ))
+            // The import result, never its backup, remains the active timetable.
+            tableDao.setDefault(tableId)
+            prepared.size
+        }
+        if (added > 0) onDataChanged()
+        return added
+    }
+
+    /** Create the timetable, optional bell schedule and courses atomically. */
+    internal suspend fun createImportedTable(
+        table: TimeTableEntity,
+        courses: List<CourseEntity>,
+        periodTable: com.lingion.sleepy.data.entity.PeriodTableEntity? = null,
+        authoritativeGroups: Boolean = false,
+    ): Long {
+        val id = db.withTransaction {
+            val names = tableDao.getAll().map { it.name }
+            val periodNames = periodTableDao.getAll().map { it.name }
+            val uniqueName = com.lingion.sleepy.util.TimeTableUtils.suggestUniqueName(table.name, names, periodNames)
+            table.periodTableId?.let { requireNotNull(periodTableDao.getById(it)) }
+            captureForUndo()
+            val periodId = table.periodTableId ?: periodTable?.let {
+                periodTableDao.insert(it.copy(id = 0, name =
+                    com.lingion.sleepy.util.TimeTableUtils.suggestUniqueName(it.name, names + uniqueName, periodNames)))
+            }
+            val tableId = tableDao.insert(table.copy(id = 0, name = uniqueName, periodTableId = periodId))
+            val prepared = if (authoritativeGroups) courses else assignGroupIds(courses)
+            courseDao.insertAll(prepared.map { it.copy(id = 0, tableId = tableId) })
+            tableDao.setDefault(tableId)
+            tableId
+        }
+        onDataChanged()
+        return id
+    }
+
     suspend fun getDefaultTable(): TimeTableEntity? = tableDao.getDefault()
 
     suspend fun insertTable(table: TimeTableEntity): Long {
