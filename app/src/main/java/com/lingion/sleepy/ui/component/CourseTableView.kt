@@ -761,10 +761,15 @@ fun CardsGridView(
                             for (day in sortedDays) {
                                 val addLabel = stringResource(R.string.occurrence_add_cell, DateUtils.localizedDay(day, context), slot.nodeStart)
                                 Spacer(modifier = Modifier.width(colW).fillMaxHeight().testTag("add-course-$day-${slot.nodeStart}").then(
-                                    if (onQuickAdd != null && quickAddEnabled && !slot.isPlaceholder) Modifier.semantics { contentDescription = addLabel }.noRippleClickable {
-                                        // Course cards above this layer consume occupied-cell taps.
-                                        quickAddState.selection = QuickAddRange(day, slot.nodeStart, slot.nodeStart)
-                                    } else Modifier
+                                    if (onQuickAdd != null && quickAddEnabled && !slot.isPlaceholder) Modifier.semantics { contentDescription = addLabel }.noRippleCombinedClickable(
+                                        // B 契约: 浮动态轻点空白格 = 无动作(防误触), 长按才开加课胶囊;
+                                        // 旧非浮动态轻点即开不变。Course cards above this layer consume
+                                        // occupied-cell taps; 浮层空档按下已被 ancestor 消费, 到这里恒为无浮动态。
+                                        onClick = { if (!floatAware) quickAddState.selection = QuickAddRange(day, slot.nodeStart, slot.nodeStart) },
+                                        onLongClick = if (floatAware)
+                                            ({ quickAddState.selection = QuickAddRange(day, slot.nodeStart, slot.nodeStart) })
+                                        else null,
+                                    ) else Modifier
                                 ))
                             }
                         }

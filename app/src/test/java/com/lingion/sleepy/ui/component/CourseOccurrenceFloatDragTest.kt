@@ -205,6 +205,23 @@ class CourseOccurrenceFloatDragTest {
         assertEquals(card.top, compose.onNodeWithTag("float-card").fetchSemanticsNode().boundsInRoot.top, 0.5f)
     }
 
+    // ---- B 契约: 浮动态空白格 = 长按开胶囊, 轻点无动作; 旧态轻点照开 ----
+
+    @Test fun inFloatModeTappingAnEmptyCellDoesNothingAndLongPressOpensTheCapsule() {
+        grid()
+        compose.onNodeWithTag("add-course-3-2").performTouchInput { click() }
+        compose.runOnIdle { } // 无崩溃即可: 轻点不再开胶囊
+        compose.onNodeWithTag("quick-add-capsule").assertDoesNotExist()
+        compose.onNodeWithTag("add-course-3-2").performTouchInput { longClick() }
+        compose.onNodeWithTag("quick-add-capsule").assertIsDisplayed()
+    }
+
+    @Test fun legacyGridStillOpensTheCapsuleOnATap() {
+        grid(onMove = null)
+        compose.onNodeWithTag("add-course-3-2").performTouchInput { click() }
+        compose.onNodeWithTag("quick-add-capsule").assertIsDisplayed()
+    }
+
     // ---- D 契约: 把手拉伸不即时落库, 空白点击走「调整持续节次」提交 ----
 
     @Test fun stretchedSpanSurvivesTheDragAndBlankTapSubmitsTheResizeForConfirmation() {
