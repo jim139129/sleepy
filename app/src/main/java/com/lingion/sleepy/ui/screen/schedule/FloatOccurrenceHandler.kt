@@ -12,6 +12,9 @@ import com.lingion.sleepy.util.DateUtils
 import com.lingion.sleepy.util.TimeTableUtils
 import kotlinx.coroutines.CancellationException
 
+/** 浮起落库的用户动作意图 — 决定首确认标题(挪动 vs 调整持续节次)。 */
+enum class FloatEditIntent { MOVE, SPAN_RESIZE }
+
 /**
  * 浮起卡落库管线 — 网格 commitFloatDrop / 浮框删除后的单次课移动与删除。
  * 与 OccurrenceEditor.save 同一口径: 快照 → resolve 本次 → 编辑副本(换节次栅格)
@@ -31,10 +34,20 @@ internal class FloatOccurrenceHandler(
     /**
      * [projected] 只需 id 与投影星期有效(渲染期投影); day/node/step 是网格吸附后的目标格。
      * [week] = pager 页 + 1, 与渲染课程同一时间域。
+     * [intent] 区分用户动作: 网格落点 = [FloatEditIntent.MOVE](换列或换节次都按「挪动」
+     * 确认); 把手拉伸后经空白点击提交 = [FloatEditIntent.SPAN_RESIZE](按「调整持续节次」
+     * 确认)。几何完全未变 → 不弹窗直存(前端本不该调到这里, 兜底放行)。
      * 口径与 OccurrenceEditor.save 一致: 本次按当前格日期 resolve; 换列(目标日期≠显示日期)
      * 走 destinations 调休审批, 同列只换节次则保留 sourceDate 直接改栅格。
      */
-    suspend fun move(projected: CourseEntity, week: Int, day: Int, node: Int, step: Int): Outcome {
+    suspend fun move(
+        projected: CourseEntity,
+        week: Int,
+        day: Int,
+        node: Int,
+        step: Int,
+        intent: FloatEditIntent = FloatEditIntent.MOVE,
+    ): Outcome {
         try {
             val transfers = AppPrefs.getHolidayTransfers(context, table.id)
             val snapshot = repo.getCourses(table.id)
@@ -46,15 +59,16 @@ internal class FloatOccurrenceHandler(
             val rows = TimeTableUtils.parseTimeSlotRows(table.timeJson)
             if (node < 1 || step < 1 || (node until node + step).any { n -> rows.none { it.node == n } })
                 return Outcome.NOT_FOUND
-            // 首确认(浮起管线 UX 契约): 与当前格完全一致的直存不弹窗(前端本不该调到这里,
-            // 兜底放行); 换列(含换列同时改跨度)弹「是否挪动这次课程」, 一条文案说全新格位
-            // 与新跨度; 同列改起止(上下把手任一拉伸)弹「是否调整持续节次」。
-            // 调休/冲突链仍在确认后串行。
-            val columnChanged = day != projected.day
-            val spanEdited = node != original.startNode || step != original.step
-            if (columnChanged || spanEdited) {
-                val titleRes = if (columnChanged) R.string.occurrence_move_confirm_title
-                else R.string.occurrence_span_confirm_title
+            // 首确认(浮起管线 UX 契约): 几何与当前格完全一致 → 直存不弹窗(兜底);
+            // 拉伸意图 → 「调整持续节次」; 挪动意图换列或换节次 → 「是否挪动这次课程」;
+            // 挪动意图只改跨度(拖回本格但拉过伸) → 按「调整持续节次」。文案一条:
+            // 课名 + 原格位 → 新格位。调休/冲突链仍在确认后串行。
+            val geometryChanged = day != projected.day || node != original.startNode || step != original.step
+            if (geometryChanged) {
+                val spanConfirm = intent == FloatEditIntent.SPAN_RESIZE ||
+                    (day == projected.day && node == original.startNode)
+                val titleRes = if (spanConfirm) R.string.occurrence_span_confirm_title
+                else R.string.occurrence_move_confirm_title
                 if (dialogs.ask(
                         context.getString(titleRes),
                         context.getString(

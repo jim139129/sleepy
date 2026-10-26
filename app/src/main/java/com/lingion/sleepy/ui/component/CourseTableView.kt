@@ -158,12 +158,24 @@ fun CardsGridView(
     pinchZoomEnabled: Boolean = false,
     // 长按浮起拖拽换节: onOccurrenceMove != null 即启用(传 null 保留旧长按直开编辑器路径)。
     // floatState 与 quickAddState 同级由调用方持有 — HorizontalPager 翻页销毁不掉浮动态。
+    // onOccurrenceMove(course, day, node, step, resizeOnly, onResult): 管线落库后回 saved —
+    // true=浮层已可关, false=用户否决/未落库, 网格按当前语义弹回或复原拉伸;
+    // resizeOnly=true 表示这次提交来自「把手拉伸后经空白点击确认」而非网格落点。
     floatState: CourseFloatState = remember { CourseFloatState() },
-    onOccurrenceMove: ((CourseEntity, Int, Int, Int) -> Unit)? = null,
+    onOccurrenceMove: ((CourseEntity, Int, Int, Int, Boolean, (Boolean) -> Unit) -> Unit)? = null,
     onOccurrenceDelete: ((CourseEntity) -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val floatAware = onOccurrenceMove != null
+    // D 契约: 把手拉伸不即时落库; 空白点击/返回键把 pending 拉伸送进同一移动管线
+    // (resizeOnly → handler 分型为「是否调整持续节次」)。否决 → revertSpan 复原原跨度。
+    fun confirmPendingResizeOrDismiss() {
+        val lifted = floatState.course ?: return
+        if (!floatState.spanChanged) { floatState.dismiss(); return }
+        onOccurrenceMove?.invoke(lifted, lifted.day, floatState.startNode, floatState.step, true) { saved ->
+            if (saved) floatState.dismiss() else floatState.revertSpan()
+        }
+    }
     LaunchedEffect(currentWeek, startDate, courses, timeSlots, visibleDays, quickAddEnabled) {
         quickAddState.dismiss()
     }
@@ -171,7 +183,8 @@ fun CardsGridView(
         floatState.dismiss()
     }
     androidx.activity.compose.BackHandler(enabled = quickAddEnabled && quickAddState.selection != null) { quickAddState.dismiss() }
-    androidx.activity.compose.BackHandler(enabled = floatAware && floatState.active) { floatState.dismiss() }
+    // D 契约: 拉伸未确认时返回键 = 空白点击 — 先走确认, 无 pending 才直接关浮层。
+    androidx.activity.compose.BackHandler(enabled = floatAware && floatState.active) { confirmPendingResizeOrDismiss() }
     // 设置页改 scale / cornerRatio 后强制 recompose
     var prefVersion by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
@@ -321,7 +334,7 @@ fun CardsGridView(
         modifier = modifier
             .fillMaxSize()
             .dismissQuickAddOnOutsidePress(quickAddState)
-            .dismissFloatOnOutsidePress(floatState)
+            .dismissFloatOnOutsidePress(floatState, ::confirmPendingResizeOrDismiss)
             .background(colors.surfaceContainerHigh, gridBgShape)
             .padding(d(8f))
     ) {
@@ -535,6 +548,7 @@ fun CardsGridView(
                 floatState.lift(
                     course = course,
                     day = course.day,
+                    week = currentWeek,
                     startNode = course.startNode,
                     endNode = course.startNode + steps - 1,
                     x = timeW + gapW + (colW + gapW) * dayIdx,
@@ -607,8 +621,11 @@ fun CardsGridView(
                     springFloatBack()
                     return
                 }
-                onOccurrenceMove?.invoke(course, sortedDays[dayIdx], snapped, floatState.step)
-                floatState.dismiss()
+                onOccurrenceMove?.invoke(course, sortedDays[dayIdx], snapped, floatState.step, false) { saved ->
+                    // C 契约: 落库成功才收层; 否决/过期 → 弹回原位浮着(拉伸 pending 随卡保留,
+                    // 由空白点击/返回键走「是否调整持续节次」确认)。
+                    if (saved) floatState.dismiss() else springFloatBack()
+                }
             }
 
             Box(

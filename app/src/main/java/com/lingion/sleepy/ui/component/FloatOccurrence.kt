@@ -59,6 +59,8 @@ import com.lingion.sleepy.ui.theme.noRippleClickable
 class CourseFloatState {
     var course: CourseEntity? by mutableStateOf(null)
     var day: Int by mutableStateOf(1)
+    /** 浮起时的周(1 起, 页+1) — 屏根空白确认路径看不到网格 currentWeek, 时间域随浮起快照存这里。 */
+    var week: Int by mutableStateOf(1)
     var startNode: Int by mutableStateOf(1)
     var endNode: Int by mutableStateOf(1)
     var isGrey: Boolean by mutableStateOf(false)
@@ -70,14 +72,43 @@ class CourseFloatState {
     var height: Dp by mutableStateOf(0.dp)
     var originX: Dp = 0.dp
     var originY: Dp = 0.dp
+    // 拉起时的原始跨度快照 — 改跨度只拖把手不即时落库(二期 D 契约):
+    // spanChanged 判 pending, revertSpan 供确认后否决复原, 落库几何只读状态不量网格。
+    var originStartNode: Int = 1
+    var originEndNode: Int = 1
+    var originHeight: Dp = 0.dp
     val step: Int get() = (endNode - startNode + 1).coerceAtLeast(1)
     val active: Boolean get() = course != null
+    /** 浮卡当前跨度与拉起时不同 — 空白点击/返回键须先走「是否调整持续节次」确认。 */
+    val spanChanged: Boolean get() = course != null && (startNode != originStartNode || endNode != originEndNode)
+
+    /** 把手拉伸未获确认 → 位置/高度回到拉起时的原样, 浮卡本身留在原位。 */
+    fun revertSpan() {
+        startNode = originStartNode
+        endNode = originEndNode
+        y = originY
+        height = originHeight
+    }
+
+    /**
+     * 空白点击/返回键的统一分派 (D 契约): 无 pending 拉伸 → 直接收层;
+     * 有 pending → [submit] 走与落点同一个移动管线 (resizeOnly=true, 目标 = 当前格 +
+     * 拉伸后的起止), 落库成功收层, 否决 → [revertSpan] 复原原跨度。
+     */
+    fun confirmPendingResizeBeforeDismiss(
+        submit: (lifted: CourseEntity, day: Int, node: Int, step: Int, onResult: (Boolean) -> Unit) -> Unit,
+    ) {
+        val lifted = course ?: return
+        if (!spanChanged) { dismiss(); return }
+        submit(lifted, lifted.day, startNode, step) { saved -> if (saved) dismiss() else revertSpan() }
+    }
     internal var cardBounds: Rect? by mutableStateOf(null)
     internal var popupBounds: Rect? by mutableStateOf(null)
 
     fun lift(
         course: CourseEntity,
         day: Int,
+        week: Int,
         startNode: Int,
         endNode: Int,
         x: Dp,
@@ -88,11 +119,13 @@ class CourseFloatState {
     ) {
         this.course = course
         this.day = day
+        this.week = week
         this.startNode = startNode
         this.endNode = endNode
         this.x = x; this.y = y; this.width = width; this.height = height
         this.isGrey = isGrey
         originX = x; originY = y
+        originStartNode = startNode; originEndNode = endNode; originHeight = height
         dragging = false
         cardBounds = null
         popupBounds = null
@@ -119,10 +152,15 @@ internal fun Modifier.gridFloatBlur(): Modifier = graphicsLayer {
  * 浮层空档处的按下: 只关浮层, 不点击课程、不打开加课胶囊。
  * Initial pass — 与 [dismissQuickAddOnOutsidePress] 同构(祖先节点最先拿到 down):
  * 落在浮卡/浮框矩形内的 down 原样放行(交给拖拽/按钮), 其余空档消费并关浮层,
- * 底层网格因此既不加课也不点课。
+ * 底层网格因此既不加课也不点课。[onBlankPress] 非空且跨度已被把手拉伸
+ * (D 契约: 拉伸不自动落库) → 空档按下改走确认回调, 浮层不直接消失。
  */
-fun Modifier.dismissFloatOnOutsidePress(state: CourseFloatState): Modifier = composed {
+fun Modifier.dismissFloatOnOutsidePress(
+    state: CourseFloatState,
+    onBlankPress: (() -> Unit)? = null,
+): Modifier = composed {
     var coordinates: LayoutCoordinates? by remember { mutableStateOf(null) }
+    val blankPress by rememberUpdatedState(onBlankPress)
     onGloballyPositioned { coordinates = it }.pointerInput(state) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
@@ -132,7 +170,8 @@ fun Modifier.dismissFloatOnOutsidePress(state: CourseFloatState): Modifier = com
                 state.popupBounds?.contains(position) == true
             if (onLifted) return@awaitEachGesture
             down.consume()
-            state.dismiss()
+            val pending = blankPress
+            if (pending != null && state.spanChanged) pending() else state.dismiss()
         }
     }
 }
