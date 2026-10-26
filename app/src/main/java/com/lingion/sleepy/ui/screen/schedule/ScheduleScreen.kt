@@ -68,6 +68,8 @@ import com.lingion.sleepy.R
 import com.lingion.sleepy.data.entity.CourseEntity
 import com.lingion.sleepy.data.entity.TimeTableEntity
 import com.lingion.sleepy.ui.component.CardsGridView
+import com.lingion.sleepy.ui.component.CourseFloatState
+import com.lingion.sleepy.ui.component.dismissFloatOnOutsidePress
 import com.lingion.sleepy.ui.component.dismissQuickAddOnOutsidePress
 import com.lingion.sleepy.ui.component.CourseDetailSheet
 import com.lingion.sleepy.ui.component.FullWeekView
@@ -134,11 +136,42 @@ fun ScheduleScreen(
 
     val quickAddState = remember(state.selectedTableId, state.selectedWeek) { com.lingion.sleepy.ui.component.QuickAddCourseState() }
     LaunchedEffect(viewMode) { quickAddState.dismiss() }
+    // 浮起卡态与 quickAddState 同级上提 — HorizontalPager 翻页重组不丢浮动态;
+    // 切表/切周由 remember 键重建自动清空(旧表浮卡随新表渲染失效)。
+    val floatState = remember(state.selectedTableId, state.selectedWeek) { com.lingion.sleepy.ui.component.CourseFloatState() }
+    LaunchedEffect(viewMode) { floatState.dismiss() }
+    // 浮框/编辑弹窗的审批问题宿主(与 OccurrenceEditor 同一 OccurrenceSaveDialogs 形态)。
+    val floatDialogs = remember(context) { com.lingion.sleepy.ui.screen.edit.OccurrenceSaveDialogs(context) }
+    com.lingion.sleepy.ui.screen.edit.OccurrenceSaveDialogHost(floatDialogs)
+    val floatScope = androidx.compose.runtime.rememberCoroutineScope()
+    var floatBusy by remember { mutableStateOf(false) }
+    // 浮层写路径共用一把屏内闸: 弹窗审批挂起期间禁止叠第二个移动/删除(与 OccurrenceEditor
+    // 的 busy 同语义)。快照/预期表在协程内现读, STALE/NOT_FOUND 只提示不落库。
+    fun runFloatOccurrence(
+        work: suspend (FloatOccurrenceHandler) -> FloatOccurrenceHandler.Outcome,
+    ) {
+        if (floatBusy) return
+        val table = state.effectiveCurrentTable ?: return
+        floatBusy = true
+        floatScope.launch {
+            try {
+                val handler = FloatOccurrenceHandler(
+                    context, com.lingion.sleepy.SleepyApp.get().repository, floatDialogs, table,
+                )
+                when (work(handler)) {
+                    FloatOccurrenceHandler.Outcome.STALE, FloatOccurrenceHandler.Outcome.NOT_FOUND ->
+                        android.widget.Toast.makeText(context, R.string.occurrence_stale, android.widget.Toast.LENGTH_SHORT).show()
+                    else -> Unit
+                }
+            } finally { floatBusy = false }
+        }
+    }
     val hasTable = state.tables.isNotEmpty()
     val hasCourses = state.courses.isNotEmpty()
 
     Column(
         modifier = Modifier.fillMaxSize().dismissQuickAddOnOutsidePress(quickAddState)
+            .dismissFloatOnOutsidePress(floatState)
     ) {
         if (!hasTable) {
             // 真的没表：导入或建表 (不用加课 — 无表载体时加课无从谈起)
@@ -380,7 +413,16 @@ fun ScheduleScreen(
                         rowHeightScale = rowHeightScale,
                         onRowHeightScaleChange = { rowHeightScale = it },
                         // v1.0.56 T3: 实验室开关 — 默认关=手势不挂(顶栏 tick 按钮也随 scaleUncommitted 恒 false 不亮)
-                        pinchZoomEnabled = AppPrefs.isGridPinchZoom(context)
+                        pinchZoomEnabled = AppPrefs.isGridPinchZoom(context),
+                        // 长按浮起换格: 移动/删除走 FloatOccurrenceHandler 单格落库管线
+                        // (与 OccurrenceEditor.save 同口径); week = 页 + 1, 与渲染同一时间域。
+                        floatState = floatState,
+                        onOccurrenceMove = { projected, day, node, step ->
+                            runFloatOccurrence { it.move(projected, page + 1, day, node, step) }
+                        },
+                        onOccurrenceDelete = { projected ->
+                            runFloatOccurrence { it.delete(projected, page + 1) }
+                        },
                     )
                 }
             }
