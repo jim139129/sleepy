@@ -164,6 +164,9 @@ fun CardsGridView(
     floatState: CourseFloatState = remember { CourseFloatState() },
     onOccurrenceMove: ((CourseEntity, Int, Int, Int, Boolean, (Boolean) -> Unit) -> Unit)? = null,
     onOccurrenceDelete: ((CourseEntity) -> Unit)? = null,
+    // 浮框「调整本次」直开编辑表单的回调 (与 move/delete 同级的浮框动作)。
+    // 传 null 的调用方回退 onCourseLongClick 老语义 (legacy 编辑器直通)。
+    onOccurrenceEdit: ((CourseEntity) -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val floatAware = onOccurrenceMove != null
@@ -1028,7 +1031,7 @@ fun CardsGridView(
                                     scale = scale,
                                     onEdit = {
                                         floatState.dismiss()
-                                        onCourseLongClick?.invoke(lifted)
+                                        (onOccurrenceEdit ?: onCourseLongClick)?.invoke(lifted)
                                     },
                                     onDelete = {
                                         floatState.dismiss()

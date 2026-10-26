@@ -28,7 +28,13 @@ import java.time.format.FormatStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun OccurrenceEditor(occurrence: CourseOccurrence, table: TimeTableEntity, onDismiss: () -> Unit) {
+internal fun OccurrenceEditor(
+    occurrence: CourseOccurrence,
+    table: TimeTableEntity,
+    // sheet 恒为两按钮菜单态(长按老路径)。浮框「调整本次」不再走这里 ——
+    // 它导航到 AddCourseScreen 完整编辑器的单次发生态(PR #225 复审定案)。
+    onDismiss: () -> Unit,
+) {
     val course = occurrence.course
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

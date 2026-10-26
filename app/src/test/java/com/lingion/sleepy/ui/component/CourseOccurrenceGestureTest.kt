@@ -166,7 +166,8 @@ class CourseOccurrenceGestureTest {
         compose.setContent {
             SleepyThemeProvider(darkTheme = false, themeKey = "default") {
                 com.lingion.sleepy.ui.screen.edit.OccurrenceEditor(
-                    com.lingion.sleepy.util.CourseOccurrence(course, date, date), table, {}
+                    com.lingion.sleepy.util.CourseOccurrence(course, date, date), table,
+                    onDismiss = {},
                 )
             }
         }
@@ -190,6 +191,26 @@ class CourseOccurrenceGestureTest {
         compose.onNodeWithTag("occurrence-date").performClick()
         compose.onNodeWithText("2026年10月6日 星期二").assertIsSelected()
         compose.onNodeWithText(app.getString(com.lingion.sleepy.R.string.cancel)).performClick()
+    }
+
+    /** 浮框「调整本次」不再经过 sheet —— 契约见 AddCourseOccurrenceNavigationContractTest,
+     *  行为见 AddCourseOccurrenceEditTest; startInEdit 表单态已随本 PR 移除。 */
+
+    /** 默认(全周视图长按老路径)仍是两级: 先「调整本次/删除本次」菜单,点调整才进表单。 */
+    @Test fun occurrenceEditorDefaultStillOpensTheTwoButtonMenu() {
+        val table = com.lingion.sleepy.data.entity.TimeTableEntity(id = 1, name = "Table", startDate = "2026-10-05", maxWeek = 1)
+        val date = java.time.LocalDate.parse("2026-10-05")
+        val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        compose.setContent {
+            SleepyThemeProvider(darkTheme = false, themeKey = "default") {
+                com.lingion.sleepy.ui.screen.edit.OccurrenceEditor(
+                    com.lingion.sleepy.util.CourseOccurrence(course, date, date), table, onDismiss = {},
+                )
+            }
+        }
+        compose.onNodeWithText(app.getString(com.lingion.sleepy.R.string.occurrence_adjust)).assertIsDisplayed()
+        compose.onNodeWithText(app.getString(com.lingion.sleepy.R.string.occurrence_delete)).assertIsDisplayed()
+        compose.onNodeWithTag("occurrence-date").assertDoesNotExist()
     }
 
     @Test fun longPressOnStackedCourseBadgeLetsTheUserChooseTheOccurrence() {

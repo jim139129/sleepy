@@ -328,7 +328,9 @@ internal fun MainTabs(
                 onManualAdd = { navigator.openAddCourse() },
                 onAddAt = navigator::openAddCourseAt,
                 onCreateTable = onCreateNewTable,
-                onEditCourse = { course -> session.beginEditCourse(course); navigator.openAddCourse(course.id, editing = true) })
+                onEditCourse = { course -> session.beginEditCourse(course); navigator.openAddCourse(course.id, editing = true) },
+                // 浮框「调整本次」= 完整编辑器单次发生态(导航而非 sheet)。
+                onEditOccurrence = { occ, week, day -> navigator.openOccurrenceEdit(occ, week, day) })
         }
         Tab.Today -> holder.SaveableStateProvider(currentTab.name) {
             TodayScreen(onEditCourse = { course -> session.beginEditCourse(course); navigator.openAddCourse(course.id, editing = true) })

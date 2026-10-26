@@ -85,6 +85,8 @@ import com.lingion.sleepy.ui.component.TimePickerField
 import com.lingion.sleepy.ui.theme.SleepyTheme
 import com.lingion.sleepy.ui.theme.noRippleClickable
 import com.lingion.sleepy.util.CourseColorUtil
+import com.lingion.sleepy.util.CourseOccurrence
+import com.lingion.sleepy.util.CourseOccurrences
 import com.lingion.sleepy.util.DateUtils
 import com.lingion.sleepy.util.TimeTableUtils
 import kotlinx.coroutines.launch
@@ -197,6 +199,10 @@ fun AddCourseScreen(
     onBack: () -> Unit,
     onSaved: () -> Unit,
     editingCourse: CourseEntity? = null,
+    // 浮框「调整本次」= 单次发生态(PR #225 复审定案): 全屏编辑器只改这一次,
+    // 星期为单选(移动语义), 保存走发生级管线(without + atDate + saveOccurrence)。
+    // 与 editingCourse 互斥 —— 导航层保证一次只传其一。
+    occurrence: CourseOccurrence? = null,
     initialSlot: InitialCourseSlot? = null,
     viewModel: ScheduleViewModel = viewModel()
 ) {
@@ -208,8 +214,8 @@ fun AddCourseScreen(
     val currentTable = state.effectiveCurrentTable
     val fieldShape = SleepyTheme.fieldShape
     val fieldColors = SleepyTheme.fieldColors()
-    var showFullEditor by remember(initialSlot, editingCourse?.id) {
-        mutableStateOf(initialSlot == null || editingCourse != null)
+    var showFullEditor by remember(initialSlot, editingCourse?.id, occurrence?.course?.id) {
+        mutableStateOf(occurrence != null || initialSlot == null || editingCourse != null)
     }
 
     // issue#23 逐卡: 待落库的新建槽位 / 已有槽位默认时间编辑 — UI 工作副本,
@@ -235,13 +241,15 @@ fun AddCourseScreen(
     // 标准 1..N 连续节次上界 — 标准卡片 startNode/step 的取值范围
     val maxStd = remember(effectiveTimeJson) { TimeTableUtils.maxStandardNode(effectiveTimeJson) }
 
-    var courseName by remember(editingCourse?.id) { mutableStateOf(editingCourse?.courseName ?: "") }
+    // 表单初始化身份键: 整组编辑用被编辑行 id, 单次发生态用发生课程 id, 新建为 null。
+    val draftKey = editingCourse?.id ?: occurrence?.course?.id
+    var courseName by remember(draftKey) { mutableStateOf(editingCourse?.courseName ?: occurrence?.course?.courseName ?: "") }
     // issue#26: 课程别名(可选) — 空串 = 处处显示原名; 组级属性, 编辑页保存时整组覆盖
-    var courseAlias by remember(editingCourse?.id) { mutableStateOf(editingCourse?.alias ?: "") }
+    var courseAlias by remember(draftKey) { mutableStateOf(editingCourse?.alias ?: occurrence?.course?.alias ?: "") }
     // issue#22: teacher/room/note/color/colorMode 已下沉到 MeetingBlockDraft(每个时段独立编辑)
-    var startWeek by remember(editingCourse?.id) { mutableIntStateOf(editingCourse?.startWeek ?: initialSlot?.week ?: 1) }
-    var endWeek by remember(editingCourse?.id) { mutableIntStateOf(editingCourse?.endWeek ?: initialSlot?.week ?: 16) }
-    var nextBlockId by remember(editingCourse?.id) { mutableIntStateOf(2) }
+    var startWeek by remember(draftKey) { mutableIntStateOf(editingCourse?.startWeek ?: initialSlot?.week ?: 1) }
+    var endWeek by remember(draftKey) { mutableIntStateOf(editingCourse?.endWeek ?: initialSlot?.week ?: 16) }
+    var nextBlockId by remember(draftKey) { mutableIntStateOf(2) }
     var validationIssues by remember { mutableStateOf<List<ValidationIssue>>(emptyList()) }
     // issue#23 逐卡: 三个弹层目标 — 顶层持状态, 内容按卡片渲染
     var edgePickTarget by remember { mutableStateOf<MeetingBlockDraft?>(null) }
@@ -260,22 +268,40 @@ fun AddCourseScreen(
     // 改组色两段式: 调色盘选中 → 暂存 → 确认对话框(spec §6.3"组色会影响本组所有跟随组色的节次")→ 落库
     var pendingGroupColorHex by remember { mutableStateOf<String?>(null) }
 
-    val meetingBlocks = remember(editingCourse?.id) {
-        mutableStateListOf(initialMeetingBlock(editingCourse).apply {
-            if (editingCourse == null && initialSlot != null) {
-                days.clear(); days.add(initialSlot.day)
-                this.startWeek = initialSlot.week; this.endWeek = initialSlot.week
-                startNode = initialSlot.node; step = initialSlot.step
-                isIrregularNode = initialSlot.node < 1 || initialSlot.node > maxStd
-                selectedEdgeNode = initialSlot.node
+    // 单次发生所在周(由发生日期反推), 用于锁定周次输入并重建 atDate 行。
+    val occurrenceWeek = occurrence?.let { occ ->
+        currentTable?.let { DateUtils.currentWeek(it.startDate, occ.sourceDate) }
+    }
+
+    val meetingBlocks = remember(draftKey) {
+        mutableStateListOf(
+            if (occurrence != null) occurrenceMeetingBlock(occurrence, currentTable?.startDate)
+            else initialMeetingBlock(editingCourse).apply {
+                if (editingCourse == null && initialSlot != null) {
+                    days.clear(); days.add(initialSlot.day)
+                    this.startWeek = initialSlot.week; this.endWeek = initialSlot.week
+                    startNode = initialSlot.node; step = initialSlot.step
+                    isIrregularNode = initialSlot.node < 1 || initialSlot.node > maxStd
+                    selectedEdgeNode = initialSlot.node
+                }
             }
-        })
+        )
     }
 
     // 用户从周/网格/今日视图点开某门课 → 编辑页要自动落到那颗胶囊所在时段卡。
     // 同一门课可能挂 N 个时段(groupSlotsForEdit 切块), 默认顺序是 HashMap 迭代序 —
     // 没有这一跳, 用户在 100+ 块里要手翻很久。
     val listState = rememberLazyListState()
+
+    // 单次发生态: 表水合可能晚于初卡构造(startDate 到手才能算发生周)。
+    // 卡周初值 0 = 未锚定; occurrenceWeek 就绪后补齐一次(用户之后改的不覆盖)。
+    LaunchedEffect(occurrenceWeek) {
+        if (occurrence != null && occurrenceWeek != null) {
+            meetingBlocks.firstOrNull()?.let { b ->
+                if (b.startWeek == 0) { b.startWeek = occurrenceWeek; b.endWeek = occurrenceWeek }
+            }
+        }
+    }
 
     // 编辑模式：查同 groupId 全部课程，按时段分组回填多个 block (issue#22 分组规则不变)
     LaunchedEffect(editingCourse?.groupId) {
@@ -356,14 +382,23 @@ fun AddCourseScreen(
 
     fun performSave() {
         if (saving) return
-        validationIssues = validateCourseDraft(courseName, meetingBlocks, startWeek, endWeek, effectiveTimeJson, context)
+        // 单次发生态: 顶层周次即发生周(隐藏输入后仍过正值校验, 与新建/整组编辑同闸)。
+        val topStartWeek = if (occurrence != null) occurrenceWeek ?: 0 else startWeek
+        val topEndWeek = if (occurrence != null) occurrenceWeek ?: 0 else endWeek
+        validationIssues = validateCourseDraft(courseName, meetingBlocks, topStartWeek, topEndWeek, effectiveTimeJson, context)
         if (validationIssues.isNotEmpty()) return
         val tid = state.selectedTableId
         if (initialSlot != null && tid != initialSlot.tableId) {
             saveError = context.getString(R.string.occurrence_table_changed)
             return
         }
-        val groupId = editingCourse?.groupId ?: java.util.UUID.randomUUID().toString()
+        // 单次发生态与 sheet 同闸: 发生行不属于当前选中表(会话中切了表)→ 拒存,
+        // 否则 saveOccurrence 的快照比对在最坏情况下也只是白丢一次操作。
+        if (occurrence != null && tid != null && tid != occurrence.course.tableId) {
+            saveError = context.getString(R.string.occurrence_table_changed)
+            return
+        }
+        val groupId = editingCourse?.groupId ?: occurrence?.course?.groupId ?: java.util.UUID.randomUUID().toString()
         val draftTimeJson = effectiveTimeJson
         val drafts = meetingBlocks.flatMap { block ->
             block.days.sorted().map { day ->
@@ -388,6 +423,52 @@ fun AddCourseScreen(
                 val table = base.copy(timeJson = draftTimeJson)
                 val transfers = AppPrefs.getHolidayTransfers(context, tableId)
                 val snapshot = repo.getCourses(tableId)
+                // ── 浮框「调整本次」= 单次发生态保存: 与 OccurrenceEditor 同源的发生级管线 ──
+                // 调休陈旧闸 → 卡值回填成发生行(身份字段以发生行为基) → 同日 atDate / 改日 destinations
+                // → without 摘出 → conflictDetails + confirmConflicts → saveOccurrence 事务。
+                if (occurrence != null) {
+                    val course = occurrence.course
+                    if (course.fixedDate == null &&
+                        com.lingion.sleepy.util.HolidayRangeOps.HolidayTransferOps
+                            .courseDateForDate(occurrence.displayDate, transfers) != occurrence.sourceDate
+                    ) {
+                        saveError = context.getString(R.string.occurrence_transfer_changed)
+                        return@launch
+                    }
+                    val block = meetingBlocks.first()
+                    check(block.days.isNotEmpty())
+                    val edited = buildCourseEntity(tableId, groupId, courseName.trim(), block,
+                        block.days.sorted().first(), courseAlias.trim(), draftTimeJson)
+                        .copy(id = course.id, day = course.day, startWeek = course.startWeek,
+                            endWeek = course.endWeek, type = course.type,
+                            groupId = course.groupId, alias = course.alias, fixedDate = course.fixedDate)
+                        .normalizeNode(draftTimeJson)
+                    // 星期单选(移动语义) + 每卡周次可改: 目标日 = 该周该星期。
+                    // dateOfWeek/currentWeek 互逆 → 同日时 targetDate == displayDate,
+                    // 与 sheet 日期选择器能力等价(sheet 可改日期 = 可改周)。
+                    val targetDate = if (block.days.size == 1)
+                        DateUtils.dateOfWeek(base.startDate, block.startWeek, block.days.first())
+                    else occurrence.displayDate
+                    require(DateUtils.semesterStatus(base.startDate, base.maxWeek, targetDate) ==
+                        DateUtils.SemesterStatus.IN_RANGE) { context.getString(R.string.occurrence_invalid_date) }
+                    val replacement = if (course.fixedDate != null || targetDate == occurrence.displayDate) {
+                        // 时间/节次类修改保留发生来源日期, 不再让用户二次选择去向。
+                        CourseOccurrences.atDate(edited, occurrence.sourceDate, table, course.fixedDate != null)
+                    } else {
+                        saveDialogs.destinations(
+                            listOf(CourseOccurrences.atDate(edited, targetDate, table, false)), table, transfers
+                        )?.single() ?: return@launch
+                    }
+                    val remaining = CourseOccurrences.without(course, occurrence.sourceDate, base.startDate)
+                    val details = CourseOccurrences.conflictDetails(
+                        listOf(replacement), snapshot.filter { it.id != course.id } + remaining,
+                        table, transfers, dayNames, conflictTemplate
+                    )
+                    if (!saveDialogs.confirmConflicts(details)) return@launch
+                    if (repo.saveOccurrence(occurrence, replacement, snapshot, table, transfers)) onSaved()
+                    else saveError = context.getString(R.string.occurrence_stale)
+                    return@launch
+                }
                 val fixedDrafts = drafts.map { it.copy(tableId = tableId) }
                 // Group edits preserve existing transfer semantics. New schedules ask about each affected date.
                 val resolved = if (editingCourse == null) saveDialogs.destinations(fixedDrafts, table, transfers) ?: return@launch
@@ -535,7 +616,7 @@ fun AddCourseScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(if (editingCourse != null) R.string.edit_course else R.string.create_course)) },
+                title = { Text(stringResource(if (editingCourse != null || occurrence != null) R.string.edit_course else R.string.create_course)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.back))
@@ -594,7 +675,8 @@ fun AddCourseScreen(
                         )
                         // 组色 — 前置课程级色源 (2026-09-15 用户令二次修正): 基础信息卡
                         // 只放整组组色编辑; 各时段卡保留自己的颜色行(见 ColorSection)
-                        if (meetingBlocks.isNotEmpty()) {
+                        // 单次发生态禁组级动作: 改组色会影响整组其他周, 不在场。
+                        if (meetingBlocks.isNotEmpty() && occurrence == null) {
                             GroupColorSection(
                                 groupSourceColorHex = groupSourceColorHex,
                                 onChangeGroupColor = { showGroupColorPicker = true }
@@ -605,46 +687,50 @@ fun AddCourseScreen(
                 }
             }
 
-            item {
-                CardSection(
-                    title = stringResource(R.string.week_range),
-                    subtitle = stringResource(R.string.week_range_sub)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+            // 顶层周范围 + 一键应用到所有时段 = 组级动作, 单次发生态不在场
+            // (每卡周次成对锁定, 见 MeetingBlockEditor 的 weekLocked)。
+            if (occurrence == null) {
+                item {
+                    CardSection(
+                        title = stringResource(R.string.week_range),
+                        subtitle = stringResource(R.string.week_range_sub)
                     ) {
-                        NumberField(
-                            label = stringResource(R.string.start_week),
-                            value = startWeek,
-                            min = 1,
-                            max = 30,
-                            modifier = Modifier.weight(1f),
-                            shape = fieldShape,
-                            colors = fieldColors
-                        ) { startWeek = it }
-                        NumberField(
-                            label = stringResource(R.string.end_week),
-                            value = endWeek,
-                            min = 1,
-                            max = 30,
-                            modifier = Modifier.weight(1f),
-                            shape = fieldShape,
-                            colors = fieldColors
-                        ) { endWeek = it }
-                    }
-                    // 显式应用 — 不再隐式下发，由用户一键覆盖所有时段
-                    FilledTonalButton(
-                        onClick = {
-                            meetingBlocks.forEach { b ->
-                                b.startWeek = startWeek
-                                b.endWeek = endWeek
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth().height(SleepyTheme.Buttons.regularHeight),
-                        shape = SleepyTheme.Buttons.shape,
-                    ) {
-                        Text(stringResource(R.string.apply_to_all_slots))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            NumberField(
+                                label = stringResource(R.string.start_week),
+                                value = startWeek,
+                                min = 1,
+                                max = 30,
+                                modifier = Modifier.weight(1f),
+                                shape = fieldShape,
+                                colors = fieldColors
+                            ) { startWeek = it }
+                            NumberField(
+                                label = stringResource(R.string.end_week),
+                                value = endWeek,
+                                min = 1,
+                                max = 30,
+                                modifier = Modifier.weight(1f),
+                                shape = fieldShape,
+                                colors = fieldColors
+                            ) { endWeek = it }
+                        }
+                        // 显式应用 — 不再隐式下发，由用户一键覆盖所有时段
+                        FilledTonalButton(
+                            onClick = {
+                                meetingBlocks.forEach { b ->
+                                    b.startWeek = startWeek
+                                    b.endWeek = endWeek
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(SleepyTheme.Buttons.regularHeight),
+                            shape = SleepyTheme.Buttons.shape,
+                        ) {
+                            Text(stringResource(R.string.apply_to_all_slots))
+                        }
                     }
                 }
             }
@@ -675,7 +761,8 @@ fun AddCourseScreen(
                     title = stringResource(R.string.slot_n, index + 1),
                     block = block,
                     groupSourceColorHex = groupSourceColorHex,
-                    canRemove = meetingBlocks.size > 1,
+                    canRemove = occurrence == null && meetingBlocks.size > 1,
+                    singleSelect = occurrence != null,
                     issues = blockIssues,
                     fieldShape = fieldShape,
                     fieldColors = fieldColors,
@@ -697,36 +784,38 @@ fun AddCourseScreen(
                 )
             }
 
-            // 新增时段按钮
-            item {
-                FilledTonalButton(
-                    onClick = {
-                        // 新时段沿用上一张卡的老师/地点,减少重复输入;
-                        // 时间、星期、周次仍采用新卡默认值,避免误复制上一卡的时段。
-                        val previous = meetingBlocks.lastOrNull()
-                        meetingBlocks.add(
-                            MeetingBlockDraft(
-                                id = nextBlockId,
-                                days = mutableStateListOf(2),
-                                startNode = 3,
-                                step = 2,
-                                startTime = "10:00",
-                                endTime = "11:40",
-                                startWeek = 1,
-                                endWeek = 16,
-                                weekType = 0,
-                                room = previous?.roomState.orEmpty(),
-                                teacher = previous?.teacherState.orEmpty()
+            // 新增时段按钮 — 单次发生态只有一张卡(一次上课), 不加时段
+            if (occurrence == null) {
+                item {
+                    FilledTonalButton(
+                        onClick = {
+                            // 新时段沿用上一张卡的老师/地点,减少重复输入;
+                            // 时间、星期、周次仍采用新卡默认值,避免误复制上一卡的时段。
+                            val previous = meetingBlocks.lastOrNull()
+                            meetingBlocks.add(
+                                MeetingBlockDraft(
+                                    id = nextBlockId,
+                                    days = mutableStateListOf(2),
+                                    startNode = 3,
+                                    step = 2,
+                                    startTime = "10:00",
+                                    endTime = "11:40",
+                                    startWeek = 1,
+                                    endWeek = 16,
+                                    weekType = 0,
+                                    room = previous?.roomState.orEmpty(),
+                                    teacher = previous?.teacherState.orEmpty()
+                                )
                             )
-                        )
-                        nextBlockId += 1
-                    },
-                    modifier = Modifier.fillMaxWidth().height(SleepyTheme.Buttons.regularHeight),
-                    shape = SleepyTheme.Buttons.shape,
-                ) {
-                    Icon(Icons.Outlined.Add, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(stringResource(R.string.add_slot))
+                            nextBlockId += 1
+                        },
+                        modifier = Modifier.fillMaxWidth().height(SleepyTheme.Buttons.regularHeight),
+                        shape = SleepyTheme.Buttons.shape,
+                    ) {
+                        Icon(Icons.Outlined.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.add_slot))
+                    }
                 }
             }
 
@@ -741,7 +830,7 @@ fun AddCourseScreen(
                 ) {
                     Icon(Icons.Outlined.Check, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(stringResource(if (editingCourse != null) R.string.save_course else R.string.create_course_btn))
+                    Text(stringResource(if (editingCourse != null || occurrence != null) R.string.save_course else R.string.create_course_btn))
                 }
             }
 
@@ -826,6 +915,38 @@ internal fun findTargetBlockIndex(
 ): Int {
     val eg = editingCourse ?: return -1
     return blocks.indexOfFirst { block -> eg.id in block.sourceIds }
+}
+
+/**
+ * 浮框「调整本次」= 单次发生态初卡: 以发生行为基, 周/星期/节次全可改,
+ * 星期为单选(移动语义)。周次初值 = 发生所在周(startDate 未就绪时为 0,
+ * 由下方锚定效应补齐); 保存前发生周与卡周必须一致, 见 performSave 单次分支。
+ */
+internal fun occurrenceMeetingBlock(occurrence: CourseOccurrence, startDate: String?): MeetingBlockDraft {
+    val course = occurrence.course
+    val week = startDate?.let { DateUtils.currentWeek(it, occurrence.sourceDate) } ?: 0
+    val days = mutableStateListOf(course.day)
+    return MeetingBlockDraft(
+        id = 1,
+        sourceIds = listOf(course.id),
+        days = days,
+        startNode = course.startNode,
+        step = course.step,
+        startTime = course.startTime.ifBlank { "08:00" },
+        endTime = course.endTime.ifBlank { "09:40" },
+        isIrregularNode = course.isIrregularNode,
+        selectedEdgeNode = if (course.isIrregularNode) course.startNode else 0,
+        isIrregularTime = course.ownTime,
+        startWeek = week,
+        endWeek = week,
+        weekType = 0,
+        room = course.room,
+        teacher = course.teacher,
+        note = course.note,
+        color = course.color,
+        fixedDate = course.fixedDate,
+        colorMode = course.colorMode
+    )
 }
 
 private fun initialMeetingBlock(course: CourseEntity?): MeetingBlockDraft {
@@ -1113,6 +1234,8 @@ private fun MeetingBlockEditor(
     block: MeetingBlockDraft,
     groupSourceColorHex: String,
     canRemove: Boolean,
+    // 单次发生态: 星期单选(移动语义, 点新日替换旧日), 周次成对锁定(这一次只有一周)
+    singleSelect: Boolean = false,
     issues: List<String>,
     fieldShape: CornerBasedShape,
     fieldColors: androidx.compose.material3.TextFieldColors,
@@ -1172,8 +1295,14 @@ private fun MeetingBlockEditor(
             }
         }
 
-        MultiDayPicker(selectedDays = block.days.toSet(), onToggleDay = { day ->
-            if (day in block.days) block.days.remove(day) else block.days.add(day)
+        MultiDayPicker(selectedDays = block.days.toSet(), singleSelect = singleSelect, onToggleDay = { day ->
+            if (singleSelect) {
+                // 星期单选(移动语义): 点新日 = 这一次挪到新日, 不叠加成两个星期
+                block.days.clear()
+                block.days.add(day)
+            } else {
+                if (day in block.days) block.days.remove(day) else block.days.add(day)
+            }
         })
 
         // 标准卡: startNode/step, 1..maxStd — 普通课程主路径, 不被"非常规"折叠栏干扰
@@ -1222,7 +1351,7 @@ private fun MeetingBlockEditor(
             onDeselectEdge = onDeselectEdge
         )
 
-        // 周次 — 每时段独立
+        // 周次 — 每时段独立; 单次发生态成对锁定(改任一端 = 这一周)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1235,7 +1364,10 @@ private fun MeetingBlockEditor(
                 modifier = Modifier.weight(1f),
                 shape = fieldShape,
                 colors = fieldColors
-            ) { block.startWeek = it }
+            ) { v ->
+                block.startWeek = v
+                if (singleSelect) block.endWeek = v
+            }
             NumberField(
                 label = stringResource(R.string.slot_week_range) + " " + stringResource(R.string.end_week),
                 value = block.endWeek,
@@ -1244,21 +1376,27 @@ private fun MeetingBlockEditor(
                 modifier = Modifier.weight(1f),
                 shape = fieldShape,
                 colors = fieldColors
-            ) { block.endWeek = it }
+            ) { v ->
+                block.endWeek = v
+                if (singleSelect) block.startWeek = v
+            }
         }
         // 单双周 + 按周次 — 4 态 SegmentedSwitcher
         // 0=每周 1=单周 2=双周 3=按周次列实际指定的周（导入 type=3 单次实验课时出现）
-        SegmentedSwitcher(
-            options = listOf(
-                0 to stringResource(R.string.week_every),
-                1 to stringResource(R.string.week_odd),
-                2 to stringResource(R.string.week_even),
-                3 to stringResource(R.string.week_custom)
-            ),
-            selected = block.weekType,
-            onSelect = { block.weekType = it },
-            modifier = Modifier.fillMaxWidth()
-        )
+        // 单次发生态不在场: 保存管线 atDate 强制 type=0, 展示了也改不了结果。
+        if (!singleSelect) {
+            SegmentedSwitcher(
+                options = listOf(
+                    0 to stringResource(R.string.week_every),
+                    1 to stringResource(R.string.week_odd),
+                    2 to stringResource(R.string.week_even),
+                    3 to stringResource(R.string.week_custom)
+                ),
+                selected = block.weekType,
+                onSelect = { block.weekType = it },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
 
         // issue#22: 老师/地点/备注下沉到每时段独立编辑 — 同名同周次不同地点时不再相互覆盖
         TextField(
@@ -1956,6 +2094,9 @@ private fun GroupColorSwatch(hex: String) {
 @Composable
 private fun MultiDayPicker(
     selectedDays: Set<Int>,
+    // 单次发生态: 星期是"移动"语义, 点击直接替换选中日(重复点击已选日不取消,
+    // 否则这一次会落到没有星期、无法定位的空选择上)。
+    singleSelect: Boolean = false,
     onToggleDay: (Int) -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
@@ -1973,7 +2114,9 @@ private fun MultiDayPicker(
                             .height(40.dp)
                             .clip(SleepyTheme.shapes.medium)
                             .background(if (selected) colors.primary else colors.surfaceContainerHighest)
-                            .noRippleClickable { onToggleDay(day) },
+                            .noRippleClickable {
+                                if (!singleSelect || !selected) onToggleDay(day)
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
