@@ -35,6 +35,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
@@ -48,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import com.lingion.sleepy.R
 import com.lingion.sleepy.data.entity.CourseEntity
 import com.lingion.sleepy.ui.theme.noRippleClickable
+import kotlinx.coroutines.withTimeout
 
 /**
  * 长按浮起交互的状态容器 — 与 [QuickAddCourseState] 同级模式(由调用方持有,
@@ -172,6 +175,86 @@ fun Modifier.dismissFloatOnOutsidePress(
             down.consume()
             val pending = blankPress
             if (pending != null && state.spanChanged) pending() else state.dismiss()
+        }
+    }
+}
+
+/**
+ * 一次按下里的「长按浮起 → 不松手即拖」连续手势 (A 契约) — 取代浮动态下课程卡
+ * 的 combinedClickable(官方长按成功后 consumeUntilUp, 同一手指再也拖不起来)。
+ * 长按等待段与官方 TapGestureDetector 同口径: 不消费任何事件, 滚动容器越 slop
+ * 照旧劫走手势(stolen → 全程静默, 保持网格从卡片起手滚动的既有能力);
+ * 超时前提前松手且位移不超 slop = 轻点 [onTap]。长按超时到达 = [onLift] 浮起,
+ * 同帧起的后续位移逐帧消费(滚动劫不走)并进入拖拽: 首次位移先 [onDragStart] 一次,
+ * 每帧 [onDrag](delta), 抬手/事件终结走 [onDrop] — 合法落点与弹回由调用方判定,
+ * 与浮卡自身 detectDragGestures 同一 commitFloatDrop 路径。浮起后未移动即松手 →
+ * 什么都不做(卡片保持浮起, 与旧长按浮起一致)。[lifted] 为真(已有浮卡)时整段
+ * 静默 — 空档消费通常已先一步拦下, 这里是兜底。
+ */
+fun Modifier.continuousFloatLift(
+    lifted: () -> Boolean,
+    onTap: () -> Unit,
+    onLift: () -> Unit,
+    onDragStart: () -> Unit,
+    onDrag: (Offset) -> Unit,
+    onDrop: () -> Unit,
+): Modifier = composed {
+    val isLifted by rememberUpdatedState(lifted)
+    val tap by rememberUpdatedState(onTap)
+    val lift by rememberUpdatedState(onLift)
+    val dragStart by rememberUpdatedState(onDragStart)
+    val drag by rememberUpdatedState(onDrag)
+    val drop by rememberUpdatedState(onDrop)
+    pointerInput(Unit) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            if (down.isConsumed || isLifted()) return@awaitEachGesture
+            val id = down.id
+            var previous = down.position
+            var releasedEarly = false
+            var stolen = false
+            try {
+                withTimeout(viewConfiguration.longPressTimeoutMillis) {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == id } ?: break
+                        if (change.changedToUp()) { releasedEarly = true; break }
+                        if (change.isConsumed) { stolen = true; break }
+                        // 官方 waitForLongPress 同口径: 同一事件的 Final pass 再看一次 —
+                        // 祖先(滚动容器)在 Main 后段消费的越界位移在这里被认定 stolen,
+                        // 长按让位给滚动, 与 combinedClickable 行为一致。
+                        val finalPass = awaitPointerEvent(PointerEventPass.Final)
+                        if (finalPass.changes.any { it.id == id && it.isConsumed }) {
+                            stolen = true; break
+                        }
+                        previous = change.position
+                    }
+                }
+            } catch (e: PointerEventTimeoutCancellationException) {
+                // 超时到达 — 官方 waitForLongPress 同形态, 即浮起信号
+            }
+            if (stolen) return@awaitEachGesture
+            if (releasedEarly) {
+                if ((previous - down.position).getDistance() <= viewConfiguration.touchSlop) tap()
+                return@awaitEachGesture
+            }
+            lift()
+            var dragging = false
+            while (true) {
+                val event = awaitPointerEvent()
+                val change = event.changes.firstOrNull { it.id == id } ?: break
+                val delta = change.position - previous
+                previous = change.position
+                if (change.changedToUp()) break
+                // 拖拽段不设越界判据(detectDragGestures 同口径 — 拖出卡面正是常态),
+                // 只认被消费: 消费 = 被滚动/他方抢走, 立即按 drop 收尾交落点判定。
+                if (change.isConsumed) break
+                if (delta == Offset.Zero) continue
+                if (!dragging) { dragging = true; dragStart() }
+                change.consume()
+                drag(delta)
+            }
+            if (dragging) drop()
         }
     }
 }

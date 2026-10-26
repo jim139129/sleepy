@@ -897,6 +897,22 @@ fun CardsGridView(
                             onLongClick = if (floatAware || onCourseLongClick != null)
                                 ( { liftCourse(course) } )
                             else null,
+                            // A 契约: 浮动态整卡交互 = 一次按下「长按浮起 → 不松手即拖」,
+                            // 取代 combinedClickable(官方长按 consumeUntilUp 后同指拖不起来);
+                            // 拖拽/落点复用浮卡同款 dragging 标记与 commitFloatDrop 判定。
+                            liftGesture = if (floatAware) Modifier.continuousFloatLift(
+                                lifted = { floatState.active },
+                                onTap = { onCourseClick(course) },
+                                onLift = { liftCourse(course) },
+                                onDragStart = { floatState.dragging = true },
+                                onDrag = { amount ->
+                                    with(headerDensity) {
+                                        floatState.x += amount.x.toDp()
+                                        floatState.y += amount.y.toDp()
+                                    }
+                                },
+                                onDrop = { commitFloatDrop() },
+                            ) else null,
                             modifier = Modifier
                                 .offset(x = cardX, y = cardY)
                                 .width(colW)
@@ -1178,7 +1194,10 @@ internal fun CourseOverlayCard(
     isGrey: Boolean = false,
     scale: Float = 1f,
     cornerRatio: Float = 1f,
-    groupRows: List<CourseEntity> = listOf(course)
+    groupRows: List<CourseEntity> = listOf(course),
+    // 浮动态连续手势(A 契约): 非 null 即整卡交互改走该修饰符(长按浮起→不松手即拖),
+    // onClick/onLongClick 不再挂载 — 与 onClick 可空模式同款, 调用方只传一个语义开关。
+    liftGesture: Modifier? = null,
 ) {
     val palette = SleepyTheme.palette
     val colors = MaterialTheme.colorScheme
@@ -1223,7 +1242,7 @@ internal fun CourseOverlayCard(
             .padding(sd(2f))
             .clip(shape)
             .background(effectiveBg)
-            .then(if (onClick != null) Modifier.noRippleCombinedClickable(onClick, onLongClick) else Modifier)
+            .then(liftGesture ?: if (onClick != null) Modifier.noRippleCombinedClickable(onClick, onLongClick) else Modifier)
             .padding(sd(4f))
     ) {
         if (subText.isBlank()) {

@@ -205,6 +205,53 @@ class CourseOccurrenceFloatDragTest {
         assertEquals(card.top, compose.onNodeWithTag("float-card").fetchSemanticsNode().boundsInRoot.top, 0.5f)
     }
 
+    // ---- A 契约: 一次按下 长按浮起 → 不松手即拖 ----
+
+    @Test fun longPressAndDragWithoutLiftingTheFingerMovesTheOccurrence() {
+        val state = CourseFloatState()
+        grid(state)
+        // 位移量按格顶锚定: add-course-1-1 空格的 root 顶边 = 浮起卡 overlayY 顶边
+        // (headH+gapH 同口径), 而卡内文本节点顶边有内衬偏置 — 用它量竖直位移会少算。
+        val origin = compose.onNodeWithTag("add-course-1-1").fetchSemanticsNode().boundsInRoot
+        val card = compose.onNodeWithText("FloatMath").fetchSemanticsNode().boundsInRoot
+        val target = compose.onNodeWithTag("add-course-3-4").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithText("FloatMath").performTouchInput {
+            down(center)
+            // 原地按过长按超时 → 浮起; 不松手继续位移 → 同指进入拖拽
+            moveTo(center, delayMillis = 900)
+            moveBy(Offset(target.center.x - card.center.x, target.top - origin.top), 300)
+            up()
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(Move(7L, 3, 4, 2, false)), moves)
+            assertNull(state.course)
+        }
+    }
+
+    @Test fun longPressThenReleaseWithoutMovingKeepsTheCardLifted() {
+        val state = CourseFloatState()
+        grid(state)
+        compose.onNodeWithText("FloatMath").performTouchInput {
+            down(center)
+            moveTo(center, delayMillis = 900)
+            up()
+        }
+        compose.runOnIdle {
+            assertNotNull(state.course)
+            assertTrue(moves.isEmpty())
+        }
+        compose.onNodeWithTag("float-popup").assertIsDisplayed()
+    }
+
+    @Test fun quickPressOnCardStillOpensTheCourseDetail() {
+        grid()
+        compose.onNodeWithText("FloatMath").performTouchInput {
+            down(center)
+            up()
+        }
+        compose.runOnIdle { assertEquals(1, clicks); assertTrue(moves.isEmpty()) }
+    }
+
     // ---- B 契约: 浮动态空白格 = 长按开胶囊, 轻点无动作; 旧态轻点照开 ----
 
     @Test fun inFloatModeTappingAnEmptyCellDoesNothingAndLongPressOpensTheCapsule() {
