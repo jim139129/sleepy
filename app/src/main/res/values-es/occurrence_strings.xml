@@ -18,6 +18,10 @@
     <string name="occurrence_transfer_changed">La reprogramación ha cambiado. Cierra y vuelve a seleccionar la clase.</string>
     <string name="occurrence_stale">Las clases o los períodos han cambiado. Cierra y vuelve a seleccionar la clase.</string>
     <string name="occurrence_save_failed">No se pudo guardar. Inténtalo de nuevo.</string>
+    <string name="occurrence_move_confirm_title">¿Mover esta clase?</string>
+    <string name="occurrence_span_confirm_title">¿Cambiar la duración de esta clase?</string>
+    <string name="occurrence_change_confirm_message">%1$s
+%2$s → %3$s</string>
     <string name="occurrence_destination_title">Elige cómo programar esta sesión</string>
     <string name="occurrence_destination_message">%1$s · %2$s\nEste día usa el horario del %3$s en lugar de sus clases habituales. Por defecto se aplica esta reprogramación.</string>
     <string name="occurrence_direct">Programar directamente ese día</string>

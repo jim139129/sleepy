@@ -18,6 +18,10 @@
     <string name="occurrence_transfer_changed">振替設定が変更されました。閉じて授業を選び直してください。</string>
     <string name="occurrence_stale">授業または時限設定が変更されました。閉じて授業を選び直してください。</string>
     <string name="occurrence_save_failed">保存できませんでした。もう一度お試しください。</string>
+    <string name="occurrence_move_confirm_title">この授業を移動しますか?</string>
+    <string name="occurrence_span_confirm_title">この授業の終了時限を調整しますか?</string>
+    <string name="occurrence_change_confirm_message">%1$s
+%2$s → %3$s</string>
     <string name="occurrence_destination_title">今回の授業の配置を選択</string>
     <string name="occurrence_destination_message">%1$s · %2$s\nこの日は %3$s の時間割に振り替えられ、通常の授業は表示されません。既定では振替設定に従います。</string>
     <string name="occurrence_direct">当日に直接配置</string>

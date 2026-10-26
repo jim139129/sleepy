@@ -18,6 +18,10 @@
     <string name="occurrence_transfer_changed">Holiday transfers changed. Close and select the class again.</string>
     <string name="occurrence_stale">The schedule changed. Close and select the class again.</string>
     <string name="occurrence_save_failed">Could not save. Please try again.</string>
+    <string name="occurrence_move_confirm_title">Move this class?</string>
+    <string name="occurrence_span_confirm_title">Change this class\'s length?</string>
+    <string name="occurrence_change_confirm_message">%1$s
+%2$s → %3$s</string>
     <string name="occurrence_destination_title">Choose how to schedule this class</string>
     <string name="occurrence_destination_message">%1$s · %2$s\nThis day follows the schedule from %3$s, replacing its regular classes. The default is to follow this transfer.</string>
     <string name="occurrence_direct">Schedule directly on this day</string>

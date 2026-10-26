@@ -46,6 +46,27 @@ internal class FloatOccurrenceHandler(
             val rows = TimeTableUtils.parseTimeSlotRows(table.timeJson)
             if (node < 1 || step < 1 || (node until node + step).any { n -> rows.none { it.node == n } })
                 return Outcome.NOT_FOUND
+            // 首确认(浮起管线 UX 契约): 与当前格完全一致的直存不弹窗(前端本不该调到这里,
+            // 兜底放行); 换列(含换列同时改跨度)弹「是否挪动这次课程」, 一条文案说全新格位
+            // 与新跨度; 同列改起止(上下把手任一拉伸)弹「是否调整持续节次」。
+            // 调休/冲突链仍在确认后串行。
+            val columnChanged = day != projected.day
+            val spanEdited = node != original.startNode || step != original.step
+            if (columnChanged || spanEdited) {
+                val titleRes = if (columnChanged) R.string.occurrence_move_confirm_title
+                else R.string.occurrence_span_confirm_title
+                if (dialogs.ask(
+                        context.getString(titleRes),
+                        context.getString(
+                            R.string.occurrence_change_confirm_message,
+                            original.courseName,
+                            spanLabel(context, projected.day, original.startNode, original.step),
+                            spanLabel(context, day, node, step),
+                        ),
+                        context.getString(R.string.ok),
+                    ) == null
+                ) return Outcome.CANCELED
+            }
             // 时间模式沿用原课(ownTime/不规则时段课换格即换成目标节次栅格时间),
             // 与 OccurrenceEditor 的 custom 种子同口径 (ownTime || isIrregularTime)。
             val custom = original.ownTime || original.isIrregularTime
@@ -79,6 +100,11 @@ internal class FloatOccurrenceHandler(
         } catch (e: Exception) { return Outcome.STALE
         }
     }
+
+    /** 确认文案的格位标签: 「周二 第4-5节」— 星期数组 + course_node_format, 全 locale 覆盖。 */
+    private fun spanLabel(context: Context, day: Int, startNode: Int, step: Int): String =
+        context.getString(R.string.course_node_format, "$startNode-${startNode + step - 1}")
+            .let { "${DateUtils.localizedDay(day, context)} $it" }
 
     /** 删除本次 — 口径与 OccurrenceEditor 删除分支一致: 先确认弹窗, replacement=null 拆行落库。 */
     suspend fun delete(projected: CourseEntity, week: Int): Outcome {

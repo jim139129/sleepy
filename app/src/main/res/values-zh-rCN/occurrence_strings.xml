@@ -18,6 +18,10 @@
     <string name="occurrence_transfer_changed">调休安排已变化，请关闭后重新选择课程。</string>
     <string name="occurrence_stale">课程或作息已变化，请关闭后重新选择课程。</string>
     <string name="occurrence_save_failed">保存失败，请重试。</string>
+    <string name="occurrence_move_confirm_title">是否挪动这次课程?</string>
+    <string name="occurrence_span_confirm_title">是否调整持续节次?</string>
+    <string name="occurrence_change_confirm_message">%1$s
+%2$s → %3$s</string>
     <string name="occurrence_destination_title">选择本次安排</string>
     <string name="occurrence_destination_message">%1$s · %2$s\n这一天改上 %3$s 的课程，原有课程被调休覆盖。默认随调休安排。</string>
     <string name="occurrence_direct">直接安排在当天</string>
