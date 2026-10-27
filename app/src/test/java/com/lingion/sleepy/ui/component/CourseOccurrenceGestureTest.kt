@@ -159,6 +159,26 @@ class CourseOccurrenceGestureTest {
         compose.runOnIdle { assertEquals(7L, selected) }
     }
 
+    /** 2026-10-27 用户裁决: 浮窗「调整本次」直接进编辑表单, 不再二次点击菜单。
+     *  startInEdit = true 打开即表单态; 默认 false 保留两级菜单(下一条用例锁定)。 */
+    @Test fun occurrenceEditorOpensStraightIntoTheEditFormWhenStartInEdit() {
+        val table = com.lingion.sleepy.data.entity.TimeTableEntity(id = 1, name = "Table", startDate = "2026-10-05", maxWeek = 1)
+        val date = java.time.LocalDate.parse("2026-10-05")
+        val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        compose.setContent {
+            SleepyThemeProvider(darkTheme = false, themeKey = "default") {
+                com.lingion.sleepy.ui.screen.edit.OccurrenceEditor(
+                    com.lingion.sleepy.util.CourseOccurrence(course, date, date), table,
+                    onDismiss = {}, startInEdit = true
+                )
+            }
+        }
+        compose.onNodeWithTag("occurrence-sheet").assertIsDisplayed()
+        compose.onNodeWithTag("occurrence-date").assertIsDisplayed()
+        compose.onNodeWithText(app.getString(com.lingion.sleepy.R.string.occurrence_save)).assertIsDisplayed()
+        compose.onNodeWithText(app.getString(com.lingion.sleepy.R.string.occurrence_delete)).assertDoesNotExist()
+    }
+
     @Test fun datePickerRestrictsSemesterAndOnlyAppliesConfirmedSelection() {
         val table = com.lingion.sleepy.data.entity.TimeTableEntity(id = 1, name = "Table", startDate = "2026-10-05", maxWeek = 1)
         val date = java.time.LocalDate.parse("2026-10-05")

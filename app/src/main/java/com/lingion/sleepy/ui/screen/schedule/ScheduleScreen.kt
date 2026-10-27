@@ -105,6 +105,8 @@ fun ScheduleScreen(
     val state by viewModel.state.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     var selectedOccurrence by remember { mutableStateOf<com.lingion.sleepy.util.CourseOccurrence?>(null) }
+    // 浮窗「调整本次」入口置 true → 面板直接展开编辑表单; 长按通道置 false 保留两级菜单。
+    var occurrenceEditDirect by remember { mutableStateOf(false) }
     var selectedCourse by remember { mutableStateOf<CourseEntity?>(null) }
     // v7.10.5 会话级置顶 override — 网格 onPickTop 与详情弹窗 radio 共用真相源。
     // radio 点击 → 这里瞬时换层(同帧) + AppPrefs 持久化(跨会话),两条通道一次写齐。
@@ -382,6 +384,7 @@ fun ScheduleScreen(
                         currentWeek = page + 1,
                         onCourseClick = { selectedCourse = it },
                         onCourseLongClick = { projected ->
+                            occurrenceEditDirect = false
                             val table = state.currentTable
                             val original = state.courses.firstOrNull { it.id == projected.id }
                             if (table != null && original != null) {
@@ -406,6 +409,7 @@ fun ScheduleScreen(
                         currentWeek = page + 1,
                         onCourseClick = { selectedCourse = it },
                         onCourseLongClick = { projected ->
+                            occurrenceEditDirect = false
                             val table = state.currentTable
                             val original = state.courses.firstOrNull { it.id == projected.id }
                             if (table != null && original != null) {
@@ -447,6 +451,17 @@ fun ScheduleScreen(
                         onOccurrenceDelete = { projected ->
                             runFloatOccurrence(work = { it.delete(projected, page + 1) })
                         },
+                        // 浮窗「调整本次」→ 解析当次 occurrence 并直达编辑表单(不再二次点击)。
+                        onOccurrenceEdit = { projected ->
+                            occurrenceEditDirect = true
+                            val table = state.currentTable
+                            val original = state.courses.firstOrNull { it.id == projected.id }
+                            if (table != null && original != null) {
+                                selectedOccurrence = com.lingion.sleepy.util.CourseOccurrences.resolve(
+                                    original, DateUtils.dateOfWeek(table.startDate, page + 1, projected.day), state.transfers
+                                )
+                            }
+                        },
                     )
                 }
             }
@@ -455,7 +470,11 @@ fun ScheduleScreen(
         selectedOccurrence?.let { occurrence ->
             state.effectiveCurrentTable?.takeIf { it.id == occurrence.course.tableId }?.let { table ->
                 androidx.compose.runtime.key(occurrence) {
-                    com.lingion.sleepy.ui.screen.edit.OccurrenceEditor(occurrence, table) { selectedOccurrence = null }
+                    com.lingion.sleepy.ui.screen.edit.OccurrenceEditor(
+                        occurrence, table,
+                        onDismiss = { selectedOccurrence = null },
+                        startInEdit = occurrenceEditDirect
+                    )
                 }
             }
         }

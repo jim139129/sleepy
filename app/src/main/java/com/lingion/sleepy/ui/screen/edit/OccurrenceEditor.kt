@@ -28,12 +28,13 @@ import java.time.format.FormatStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun OccurrenceEditor(occurrence: CourseOccurrence, table: TimeTableEntity, onDismiss: () -> Unit) {
+internal fun OccurrenceEditor(occurrence: CourseOccurrence, table: TimeTableEntity, onDismiss: () -> Unit, startInEdit: Boolean = false) {
     val course = occurrence.course
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val dialogs = remember(context) { OccurrenceSaveDialogs(context) }
-    var editing by remember { mutableStateOf(false) }
+    // startInEdit: 浮窗「调整本次」入口已表达调整意图, 打开即表单态, 不再二次点击菜单。
+    var editing by remember { mutableStateOf(startInEdit) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var date by remember { mutableStateOf(occurrence.displayDate) }

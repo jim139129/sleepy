@@ -52,6 +52,7 @@ class CourseOccurrenceFloatDragTest {
             },
         onDelete: ((CourseEntity) -> Unit)? = { deleted.add(it.id) },
         onLongPress: (CourseEntity) -> Unit = { longPressed.add(it.id) },
+        onOccurrenceEdit: ((CourseEntity) -> Unit)? = null,
         onQuickAdd: ((Int, Int, Int) -> Unit)? = { _, _, _ -> },
     ) {
         compose.setContent {
@@ -61,6 +62,7 @@ class CourseOccurrenceFloatDragTest {
                         floatState = state,
                         onQuickAdd = onQuickAdd,
                         onOccurrenceMove = onMove, onOccurrenceDelete = onDelete,
+                        onOccurrenceEdit = onOccurrenceEdit,
                         onCourseClick = { clicks++ }, onCourseLongClick = onLongPress)
                 }
             }
@@ -106,6 +108,22 @@ class CourseOccurrenceFloatDragTest {
         compose.runOnIdle { assertEquals(listOf(7L), longPressed); assertTrue(deleted.isEmpty()) }
         compose.onNodeWithTag("float-popup").assertDoesNotExist()
         compose.onNodeWithTag("float-card").assertDoesNotExist()
+        compose.onNodeWithTag("float-backdrop").assertDoesNotExist()
+    }
+
+    /** 2026-10-27 用户裁决: 浮窗上已点「调整本次」, 编辑器不得再要求二次点击。
+     *  onOccurrenceEdit 提供时浮窗调整走该直达回调, 不再借用长按通道;
+     *  未提供时退回长按通道(上一条用例锁定) — 存量调用方契约不变。 */
+    @Test fun popupEditUsesTheDedicatedAdjustCallbackWhenProvided() {
+        val edited = mutableListOf<Long>()
+        grid(onOccurrenceEdit = { edited.add(it.id) })
+        compose.onNodeWithText("FloatMath").performTouchInput { longClick() }
+        compose.onNodeWithTag("float-edit").performClick()
+        compose.runOnIdle {
+            assertEquals(listOf(7L), edited)
+            assertTrue(longPressed.isEmpty()); assertTrue(deleted.isEmpty())
+        }
+        compose.onNodeWithTag("float-popup").assertDoesNotExist()
         compose.onNodeWithTag("float-backdrop").assertDoesNotExist()
     }
 
