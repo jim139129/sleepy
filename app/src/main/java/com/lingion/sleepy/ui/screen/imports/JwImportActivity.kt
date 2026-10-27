@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
@@ -92,6 +93,7 @@ import kotlinx.serialization.json.Json
 class JwImportActivity : ComponentActivity() {
 
     companion object {
+        const val EXTRA_TARGET_TABLE_ID = "extra_target_table_id"
         const val EXTRA_DRAFT_ID = "extra_import_draft_id"
     }
 
@@ -126,6 +128,7 @@ class JwImportActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
                 val draftRepository = SleepyApp.get().importDraftRepository
                 val incomingDraftId = intent.getStringExtra(EXTRA_DRAFT_ID)
+                val targetTableId = intent.getLongExtra(EXTRA_TARGET_TABLE_ID, 0L)
                 // 组合树, 滚动位置/搜索词全部销毁。各 stage 分支内容包独立 key 的
                 // SaveableStateProvider(key = stage 类名), WebView 登录返回学校列表时
                 // 列表滚动位置与 rememberSaveable 态原样恢复。
@@ -149,8 +152,12 @@ class JwImportActivity : ComponentActivity() {
                 var importFinished by remember { mutableStateOf(false) }
                 var isApplying by remember { mutableStateOf(false) }
                 var importPreview by remember { mutableStateOf<ImportPreview?>(null) }
+                // 2026-10-26 用户定令: 加课路(Stage.Preview 仅在 targetTableId>0 时到达)
+                // 解析后先逐组勾选, 确认后才进 ImportPreviewDialog。
+                var courseSelectionDone by remember { mutableStateOf(false) }
+                // 勾选确认后到重建 preview 完成前, 勾选页保持在场, 避免全量数据闪现确认框。
+                var courseSelectionApplying by remember { mutableStateOf(false) }
                 var thuSkippedCount by remember { mutableIntStateOf(0) }
-                var pendingMode by remember { mutableStateOf(ImportApplyMode.ImportAsNew) }
                 var exitDraftState by remember { mutableStateOf(ExitDraftState()) }
                 // 解析后的课程暂存 + 配置确认状态
                 var parsedCourses by remember { mutableStateOf<List<JwCourse>>(emptyList()) }
@@ -202,6 +209,7 @@ class JwImportActivity : ComponentActivity() {
 
                 fun requestExit() {
                     if (isApplying) return
+                    if (incomingDraftId == null) { finish(); return }
                     val result = reduceExitDraftState(exitDraftState, ExitDraftEvent.RequestExit)
                     exitDraftState = result.state
                     if (result.outcome == ExitDraftOutcome.FinishDirectly) finish()
@@ -259,24 +267,14 @@ class JwImportActivity : ComponentActivity() {
                     }
                 }
 
-                suspend fun applySharedImport(preview: ImportPreview, mode: ImportApplyMode) {
+                suspend fun applySharedImport(preview: ImportPreview, decision: ImportDecision) {
                     var imported = false
-                    applyImportPreview(
-                        preview = preview.copy(parseResult = preview.parseResult.copy(
-                            timeJson = configTimeJson,
-                            nodesPerDay = maxOf(
-                                preview.parseResult.nodesPerDay,
-                                TimeTableUtils.parseTimeSlotRows(configTimeJson).maxOfOrNull { it.node } ?: 0
-                            )
-                        )),
-                        mode = mode,
-                        confirmedStartDateRaw = configStartDate,
-                        confirmedTableName = configTableName,
-                        confirmedTimeJson = configTimeJson,
+                    applyCourseImport(
+                        preview = preview,
+                        decision = decision,
                         context = this@JwImportActivity,
                         onImported = { imported = true },
                         onError = { errorMsg = it },
-                        bindPeriodTableId = configBindPeriodTableId?.takeIf { it > 0 }
                     )
                     // A rejected append must keep the preview and its recoverable draft.
                     if (imported) finishOrReport(selectedSchool ?: parsedSchool)
@@ -508,7 +506,7 @@ class JwImportActivity : ComponentActivity() {
                             catalogNotice = snapshot.school
                             Stage.SelectSchool
                         } else Stage.WebViewLogin
-                        JwImportDraftPhase.CONFIGURE_CONFIRM -> Stage.Preview
+                        JwImportDraftPhase.CONFIGURE_CONFIRM -> Stage.ConfigureConfirm
                     }
                 }
 
@@ -519,11 +517,12 @@ class JwImportActivity : ComponentActivity() {
 
                     stage is Stage.Preview && parsedCourses.isNotEmpty() -> {
                         LaunchedEffect(parsedCourses) {
+                            // 重新解析即重新勾选: 全量数据变了, 旧的勾选结论作废。
+                            courseSelectionDone = false
+                            courseSelectionApplying = false
                             try {
                                 val repo = SleepyApp.get().repository
-                                val tables = repo.getAllTables()
-                                val targetId = tables.firstOrNull { it.isDefault }?.id
-                                    ?: tables.firstOrNull()?.id ?: 0L
+                                val targetId = targetTableId
                                 val effectiveRows = TimeTableUtils.effectiveRowsForConfirm(
                                     manualRows = configRows,
                                     bindId = configBindPeriodTableId,
@@ -550,31 +549,60 @@ class JwImportActivity : ComponentActivity() {
                         }
                         BackHandler { requestExit() }
                         importPreview?.let { preview ->
+                            if (!courseSelectionDone) {
+                                // 加课路第一步: 逐组勾选要添加的课程; 确认前不进冲突决策框。
+                                CourseSelectionSheet(
+                                    parseResult = preview.parseResult,
+                                    onDismiss = { requestExit() },
+                                    onConfirm = { selectedKeys ->
+                                        if (!courseSelectionApplying) {
+                                            courseSelectionApplying = true
+                                            scope.launch {
+                                                try {
+                                                    val filtered = preview.parseResult.courses
+                                                        .filter { importCourseGroupKey(it) in selectedKeys }
+                                                    if (filtered.isEmpty()) {
+                                                        errorMsg = getString(R.string.import_selection_empty)
+                                                    } else {
+                                                        importPreview = buildImportPreview(
+                                                            parseResult = preview.parseResult.copy(courses = filtered),
+                                                            tableId = targetTableId,
+                                                            context = this@JwImportActivity,
+                                                        )
+                                                        courseSelectionDone = true
+                                                    }
+                                                } catch (e: Exception) {
+                                                    errorMsg = getString(R.string.jw_parse_failed, e.message ?: "")
+                                                } finally {
+                                                    courseSelectionApplying = false
+                                                }
+                                            }
+                                        }
+                                    }
+                                )
+                            } else {
                             ImportPreviewDialog(
                                 preview = preview,
                                 parserWarning = if (parsedSchool?.type == JwProtocol.TYPE_THU && thuSkippedCount > 0)
                                     getString(R.string.jw_thu_skipped_courses, thuSkippedCount) else null,
                                 onDismiss = { requestExit() },
                                 isApplying = isApplying,
-                                onApply = { mode ->
-                                    if (isApplying) return@ImportPreviewDialog
-                                    pendingMode = mode
-                                    if (mode == ImportApplyMode.AppendNonConflict || mode == ImportApplyMode.AppendAll) {
+                                onApply = { decision ->
+                                    if (!isApplying) {
                                         isApplying = true
                                         scope.launch {
                                             try {
-                                                applySharedImport(preview, mode)
+                                                applySharedImport(preview, decision)
                                             } catch (e: Exception) {
                                                 errorMsg = getString(R.string.jw_parse_failed, e.message ?: "")
                                             } finally {
                                                 isApplying = false
                                             }
                                         }
-                                    } else {
-                                        stage = Stage.ConfigureConfirm
                                     }
                                 }
                             )
+                            }
                         }
                     }
 
@@ -607,6 +635,13 @@ class JwImportActivity : ComponentActivity() {
                                         .verticalScroll(rememberScrollState()),
                                     verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
+                                    if (thuSkippedCount > 0) {
+                                        Text(
+                                            getString(R.string.jw_thu_skipped_courses, thuSkippedCount),
+                                            color = colors.onErrorContainer,
+                                            modifier = Modifier.fillMaxWidth().background(colors.errorContainer).padding(12.dp)
+                                        )
+                                    }
                                     DatePickerField(
                                         value = configStartDate,
                                         onValueChange = { configStartDate = it; checkpointDraft() },
@@ -661,7 +696,8 @@ class JwImportActivity : ComponentActivity() {
                             },
                             confirmButton = {
                                 TextButton(enabled = !isApplying, onClick = {
-                                    if (configStartDate.isBlank() || !Regex("""^\d{4}-\d{2}-\d{2}$""").matches(configStartDate)) {
+                                    if (isApplying) return@TextButton
+                                    if (runCatching { java.time.LocalDate.parse(configStartDate) }.isFailure) {
                                         confirmError = getString(R.string.start_date_format)
                                         return@TextButton
                                     }
@@ -691,41 +727,34 @@ class JwImportActivity : ComponentActivity() {
                                     isApplying = true
                                     scope.launch {
                                         try {
-                                            if (pendingMode == ImportApplyMode.ImportAsNew) {
-                                                val maxNode = effectiveRows.maxOfOrNull { it.node } ?: 0
-                                                // v1.0.56 T10: id=-1 = 本次导入自动建作息表(名字随课表名, VM 内
-                                                // 走全局唯一名顺延); id>0 = 绑定既有表; null = 不建不绑。
-                                                // effectiveRows 已按绑定语义解析(id>0 = 表时间, 否则手动 rows)
-                                                val autoPeriodEntity =
-                                                    if (configBindPeriodTableId == -1L && effectiveRows.isNotEmpty()) {
-                                                        com.lingion.sleepy.data.entity.PeriodTableEntity(
-                                                            name = configTableName.ifBlank {
-                                                                getString(R.string.jw_import_title, school.name)
-                                                            },
-                                                            nodesPerDay = effectiveRows.size,
-                                                            timeJson = configTimeJson
-                                                        )
-                                                    } else null
-                                                val tableId = jwViewModel.importAsNewTable(
-                                                    courses = parsedCourses,
-                                                    tableName = configTableName.ifBlank {
-                                                        getString(R.string.jw_import_title, school.name)
-                                                    },
-                                                    startDate = configStartDate,
-                                                    timeJson = configTimeJson,
-                                                    nodesPerDay = maxNode,
-                                                    smartConfigJson = Json.encodeToString(configSmartConfig),
-                                                    periodTable = autoPeriodEntity
-                                                )
-                                                // v1.0.56 T6: 选了既有作息表 Tab → 导入的课表直接绑定该表(节次以表为准)
-                                                val chosenId = configBindPeriodTableId
-                                                if (chosenId != null && chosenId > 0) {
-                                                    scheduleViewModel.bindPeriodTable(tableId, chosenId)
-                                                }
-                                                finishOrReport(school)
-                                            } else {
-                                                applySharedImport(requireNotNull(importPreview), pendingMode)
-                                            }
+                                            val result = ScheduleParser.ParseResult(
+                                                tableName = configTableName,
+                                                startDate = configStartDate,
+                                                courses = jwViewModel.toCourseEntities(parsedCourses, 0L, "#FF6750A4"),
+                                                timeJson = configTimeJson,
+                                                nodesPerDay = effectiveRows.maxOfOrNull { it.node } ?: 1,
+                                                maxWeek = parsedCourses.maxOf { it.endWeek },
+                                                periodTable = if (configBindPeriodTableId == -1L) {
+                                                    ScheduleParser.ParsedPeriodTable(
+                                                        sourceId = 0L,
+                                                        name = configTableName,
+                                                        nodesPerDay = effectiveRows.maxOfOrNull { it.node } ?: 1,
+                                                        timeJson = configTimeJson,
+                                                    )
+                                                } else null,
+                                            )
+                                            var imported = false
+                                            applyNewTableImport(
+                                                preview = buildImportPreview(result, 0L, this@JwImportActivity),
+                                                confirmedStartDateRaw = configStartDate,
+                                                confirmedTableName = configTableName,
+                                                confirmedTimeJson = configTimeJson,
+                                                confirmedSmartConfigJson = Json.encodeToString(configSmartConfig),
+                                                context = this@JwImportActivity,
+                                                onImported = { imported = true },
+                                                bindPeriodTableId = configBindPeriodTableId?.takeIf { it > 0 },
+                                            )
+                                            if (imported) finishOrReport(school)
                                         } catch (e: Exception) {
                                             Log.e("JwImport", "import failed", e)
                                             errorMsg = getString(R.string.jw_parse_failed, e.message ?: "")
@@ -735,15 +764,14 @@ class JwImportActivity : ComponentActivity() {
                                         }
                                     }
                                 }) {
-                                    Text(getString(R.string.jw_config_confirm))
+                                    Text(getString(R.string.import_confirm))
                                 }
                             },
                             dismissButton = {
                                 TextButton(enabled = !isApplying, onClick = {
-                                    importPreview = null
-                                    stage = Stage.Preview
+                                    requestExit()
                                 }) {
-                                    Text(getString(R.string.back))
+                                    Text(getString(R.string.cancel))
                                 }
                             }
                         )
@@ -759,7 +787,7 @@ class JwImportActivity : ComponentActivity() {
                                         return@SchoolSelectScreen
                                     }
                                     selectedSchool = school
-                                    exitDraftState = exitDraftState.copy(activeImport = true)
+                                    exitDraftState = exitDraftState.copy(activeImport = incomingDraftId != null)
                                     stage = Stage.WebViewLogin
                                 },
                                 onBack = { requestExit() }
@@ -816,7 +844,7 @@ class JwImportActivity : ComponentActivity() {
                                             // 不直接落库，进配置确认页
                                             parsedCourses = courses
                                             parsedSchool = sch
-                                            exitDraftState = exitDraftState.copy(activeImport = true)
+                                            exitDraftState = exitDraftState.copy(activeImport = incomingDraftId != null)
                                             // 根据课程实际节次数生成行；
                                             // 如果 WebView 抓到 periods 则预填，否则空行让用户填
                                             val maxNode = courses.maxOf { maxOf(it.startNode, it.endNode) }
@@ -845,19 +873,7 @@ class JwImportActivity : ComponentActivity() {
                                                         startTime = newRows.firstOrNull()?.start?.takeIf { it.isNotBlank() } ?: "08:00"
                                                     )
                                             configSmartConfig = inferredSmartConfig
-                                            val snapshot = JwImportDraftSnapshot(
-                                                school = sch,
-                                                courses = courses,
-                                                periods = newRows.map { JwImportDraftPeriod(it.node, it.start, it.end) },
-                                                termStartDate = termStartDate,
-                                                tableName = getString(R.string.jw_import_title, sch.name),
-                                                smartConfigJson = Json.encodeToString(inferredSmartConfig),
-                                            )
-                                            draftId = withContext(Dispatchers.IO) {
-                                                draftRepository.save(snapshot, sourceType = "jw", sourceUrl = sch.url)
-                                            }
-                                            stage = Stage.Preview
-                                            // v1.0.56 T10: 默认选中「本次导入自动建作息表」(合成 id=-1)
+                                            stage = if (targetTableId > 0L) Stage.Preview else Stage.ConfigureConfirm
                                             configBindPeriodTableId = -1L
                                             statusMsg = null
                                         } catch (e: Exception) {
