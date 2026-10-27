@@ -240,19 +240,33 @@ fun Modifier.continuousFloatLift(
             }
             lift()
             var dragging = false
+            // 浮起死区 (2026-10-27 用户反馈: 长按浮起后手抖约 0.1cm 即进拖拽, 模糊浮框瞬间消失):
+            // 旧实现按"逐帧非零增量"入场 — 0.1px 也算拖动。官方 DragGestureDetector 的
+            // TouchSlopDetector 用「自锚点累计位移 ≥ touchSlop」判据; 长按转拖拽比官方
+            // 「按下即拖」多一段持按, 抖动抑制取 2×touchSlop。死区内仍逐帧消费 —
+            // 浮起即已认领手势, 不许滚动劫走 (与旧行为一致); 越区首帧一次性补齐累计位移,
+            // 卡落到指下, 终帧位移量与旧算法逐帧相同 → 落点判定不受影响。
+            val anchor = previous
+            val liftSlop = viewConfiguration.touchSlop * 2f
             while (true) {
                 val event = awaitPointerEvent()
                 val change = event.changes.firstOrNull { it.id == id } ?: break
-                val delta = change.position - previous
-                previous = change.position
                 if (change.changedToUp()) break
                 // 拖拽段不设越界判据(detectDragGestures 同口径 — 拖出卡面正是常态),
                 // 只认被消费: 消费 = 被滚动/他方抢走, 立即按 drop 收尾交落点判定。
                 if (change.isConsumed) break
-                if (delta == Offset.Zero) continue
-                if (!dragging) { dragging = true; dragStart() }
+                val delta = change.position - previous
+                previous = change.position
                 change.consume()
-                drag(delta)
+                if (dragging) {
+                    if (delta != Offset.Zero) drag(delta)
+                    continue
+                }
+                val accumulated = change.position - anchor
+                if (accumulated.getDistance() <= liftSlop) continue
+                dragging = true
+                dragStart()
+                drag(accumulated)
             }
             if (dragging) drop()
         }

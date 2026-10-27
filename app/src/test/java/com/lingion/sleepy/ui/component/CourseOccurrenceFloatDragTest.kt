@@ -261,6 +261,49 @@ class CourseOccurrenceFloatDragTest {
         compose.onNodeWithTag("float-popup").assertIsDisplayed()
     }
 
+    /** 2026-10-27 用户反馈: 长按浮起后手指微抖约 0.1cm, 模糊与浮框瞬间消失。
+     *  浮起死区: 自浮起点累计位移未超过 2×touchSlop 前不得进入拖拽 —
+     *  参照官方 DragGestureDetector 的 TouchSlopDetector(累计判据, 非逐帧增量)。 */
+    @Test fun jitterAfterLiftKeepsTheBlurPopupAndOriginPosition() {
+        val state = CourseFloatState()
+        grid(state)
+        compose.onNodeWithText("FloatMath").performTouchInput {
+            down(center)
+            moveTo(center, delayMillis = 900)
+            // 30px 对角 < 死区(xhdpi: touchSlop 8dp=16px, 2×=32px): 只许抖动, 不许进拖拽
+            moveBy(Offset(24f, 18f), 100)
+            up()
+        }
+        compose.onNodeWithTag("float-backdrop").assertIsDisplayed()
+        compose.onNodeWithTag("float-popup").assertIsDisplayed()
+        compose.runOnIdle {
+            assertNotNull(state.course)
+            assertFalse(state.dragging)
+            assertEquals(state.originX, state.x)
+            assertEquals(state.originY, state.y)
+            assertTrue(moves.isEmpty())
+        }
+    }
+
+    /** 超过死区 → 进入拖拽, 模糊浮框让位, 卡片跟手; 与抖动用例共用一段手势证明判据是累计量。 */
+    @Test fun crossingTheLiftSlopStartsTheDragAndHidesThePopup() {
+        val state = CourseFloatState()
+        grid(state)
+        compose.onNodeWithText("FloatMath").performTouchInput {
+            down(center)
+            moveTo(center, delayMillis = 900)
+            moveBy(Offset(24f, 18f), 100) // 30px 对角, 死区内
+        }
+        compose.runOnIdle { assertFalse(state.dragging) }
+        compose.onNodeWithTag("float-popup").assertIsDisplayed()
+        compose.onNodeWithTag("float-card").performTouchInput {
+            moveBy(Offset(80f, 80f), 200) // 自浮起点累计约 134px, 越死区 → 进拖拽
+        }
+        compose.runOnIdle { assertTrue(state.dragging) }
+        compose.onNodeWithTag("float-popup").assertDoesNotExist()
+        compose.onNodeWithTag("float-card").performTouchInput { up() }
+    }
+
     @Test fun quickPressOnCardStillOpensTheCourseDetail() {
         grid()
         compose.onNodeWithText("FloatMath").performTouchInput {
