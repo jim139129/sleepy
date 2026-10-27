@@ -204,48 +204,19 @@ internal fun SleepyNavHost(
             val editingCourse = remember(editing, courseId, session.editingCourse?.id) {
                 if (editing) session.editingCourse else null
             }
-            // 浮框「调整本次」= 单次发生态。点击当场 session 已同步写入(快路径);
-            // 进程恢复后 session 为空, 由路由字段(occurrenceId/Week/Day)+仓储再水合。
-            val ctx = LocalContext.current
-            val occurrenceTableId = key.tableId.takeUnless { it == SleepyRoute.NO_ID }
-            val occurrenceRoute = key.occurrenceId.takeUnless { it == SleepyRoute.NO_ID }
-            var rehydratedOccurrence by remember(key) {
-                mutableStateOf(
-                    occurrenceRoute?.let { id -> session.occurrenceEditTarget
-                        ?.takeIf { it.course.id == id } }
-                )
-            }
-            LaunchedEffect(occurrenceRoute, occurrenceTableId) {
-                val id = occurrenceRoute ?: return@LaunchedEffect
-                if (rehydratedOccurrence != null) return@LaunchedEffect
-                val tableId = occurrenceTableId ?: return@LaunchedEffect
-                val repo = com.lingion.sleepy.SleepyApp.get().repository
-                val table = repo.getTable(tableId) ?: return@LaunchedEffect
-                val course = repo.getCourses(tableId).firstOrNull { it.id == id } ?: return@LaunchedEffect
-                val date = com.lingion.sleepy.util.DateUtils.dateOfWeek(
-                    table.startDate, key.occurrenceWeek, key.occurrenceDay
-                )
-                rehydratedOccurrence = com.lingion.sleepy.util.CourseOccurrences.resolve(
-                    course, date,
-                    com.lingion.sleepy.util.AppPrefs.getHolidayTransfers(ctx, tableId)
-                )
-            }
             AddCourseScreen(
                 onBack = {
                     session.clearEditCourse()
-                    if (occurrenceRoute != null) session.clearOccurrenceEdit()
                     if (!navigator.pop()) {
                         // 栈只有 MAIN,直接清课程态即可
                     }
                 },
                 onSaved = {
                     session.clearEditCourse()
-                    if (occurrenceRoute != null) session.clearOccurrenceEdit()
                     if (!navigator.pop()) { /* 同上 */ }
                     setCurrentTab(Tab.Schedule)
                 },
                 editingCourse = editingCourse,
-                occurrence = rehydratedOccurrence,
                 initialSlot = if (key.week > 0) com.lingion.sleepy.ui.screen.edit.InitialCourseSlot(key.tableId, key.week, key.day, key.node, key.step) else null,
             )
         }
@@ -610,8 +581,6 @@ private fun MainRoute(
                         onAddAt = navigator::openAddCourseAt,
                         onCreateTable = onCreateNewTable,
                         onEditCourse = onTabletEditCourse,
-                        // 平板浮框「调整本次」同样导航到完整编辑器单次发生态
-                        onEditOccurrence = { occ, week, day -> navigator.openOccurrenceEdit(occ, week, day) },
                         viewModel = mainVm,
                     )
                 }

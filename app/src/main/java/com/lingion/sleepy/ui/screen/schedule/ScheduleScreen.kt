@@ -100,9 +100,6 @@ fun ScheduleScreen(
     onAddAt: (Long, Int, Int, Int, Int) -> Unit = { _, _, _, _, _ -> },
     onCreateTable: () -> Unit = {},
     onEditCourse: (CourseEntity) -> Unit = {},
-    // 浮框「调整本次」= 导航到完整编辑器(AddCourseScreen 单次发生态), 不再开 sheet。
-    // 发生对象 + 所在周 + 星期交给导航层入路由; 进程恢复由路由字段再水合。
-    onEditOccurrence: (com.lingion.sleepy.util.CourseOccurrence, Int, Int) -> Unit = { _, _, _ -> },
     viewModel: ScheduleViewModel = viewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -449,19 +446,6 @@ fun ScheduleScreen(
                         },
                         onOccurrenceDelete = { projected ->
                             runFloatOccurrence(work = { it.delete(projected, page + 1) })
-                        },
-                        // 浮框「调整本次」= 导航到完整编辑器单次发生态: 发生对象 + 页周 + 星期
-                        // 交给调用方 navigator.openOccurrenceEdit(调用点见 MainActivity / 平板 MainRoute),
-                        // 不再置 selectedOccurrence 开 sheet; sheet 只剩长按老路径(两级菜单)。
-                        onOccurrenceEdit = { projected ->
-                            val table = state.currentTable
-                            val original = state.courses.firstOrNull { it.id == projected.id }
-                            if (table != null && original != null) {
-                                val occurrence = com.lingion.sleepy.util.CourseOccurrences.resolve(
-                                    original, DateUtils.dateOfWeek(table.startDate, page + 1, projected.day), state.transfers
-                                )
-                                if (occurrence != null) onEditOccurrence(occurrence, page + 1, projected.day)
-                            }
                         },
                     )
                 }

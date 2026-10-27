@@ -9,7 +9,6 @@ import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.rememberNavBackStack
 import com.lingion.sleepy.data.entity.CourseEntity
-import com.lingion.sleepy.util.CourseOccurrence
 
 /**
  * issue#45: 官方 androidx.navigation3 的极薄封装。
@@ -47,18 +46,6 @@ class SleepyNavigator(
         push(SleepyRoute.AddCourse(courseId, editing))
     fun openAddCourseAt(tableId: Long, week: Int, day: Int, node: Int, step: Int) =
         push(SleepyRoute.AddCourse(tableId = tableId, week = week, day = day, node = node, step = step))
-    /**
-     * 浮框「调整本次」: 跳转完整编辑器(二级页面)的单次发生态。
-     * editing=false —— pop-guard 只清 editing=true 路由, 发生态路由要活过进程恢复;
-     * week/day 是发生所在周与星期, 恢复时经 CourseOccurrences.resolve 重建发生对象。
-     * 同时把发生对象写入会话态, 点击当场进入编辑器走同步快路径, 不等仓储异步读。
-     */
-    fun openOccurrenceEdit(occurrence: CourseOccurrence, week: Int, day: Int) {
-        session.beginOccurrenceEdit(occurrence)
-        push(SleepyRoute.AddCourse(courseId = occurrence.course.id, editing = false,
-            tableId = occurrence.course.tableId,
-            occurrenceId = occurrence.course.id, occurrenceWeek = week, occurrenceDay = day))
-    }
     fun openAllTables() = push(SleepyRoute.AllTables)
     fun openCourseList() = push(SleepyRoute.CourseList)
     fun openAppearance() = push(SleepyRoute.Appearance)
@@ -101,11 +88,5 @@ class NavSession {
         private set
     fun beginEditCourse(course: CourseEntity) { editingCourse = course }
     fun clearEditCourse() { editingCourse = null }
-    // 浮框「调整本次」的发生对象: 会话态, 与 editingCourse 同级(不持久化, 旋转/进程恢复安全丢弃,
-    // 恢复路径改由路由字段重建)。private set —— 只能经 navigator.openOccurrenceEdit 写入。
-    var occurrenceEditTarget: CourseOccurrence? by mutableStateOf(null)
-        private set
-    fun beginOccurrenceEdit(occurrence: CourseOccurrence) { occurrenceEditTarget = occurrence }
-    fun clearOccurrenceEdit() { occurrenceEditTarget = null }
     companion object { const val NO_ID = SleepyRoute.NO_ID }
 }
